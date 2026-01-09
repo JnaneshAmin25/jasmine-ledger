@@ -23,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { format, parseISO, subMonths } from 'date-fns';
-import { Trash2, Package, IndianRupee, Clock, Calendar } from 'lucide-react';
+import { Trash2, Package, IndianRupee, Clock, Calendar, CalendarOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export const EntryList = () => {
@@ -101,14 +101,23 @@ interface EntryCardProps {
 }
 
 const EntryCard = ({ entry, onDelete }: EntryCardProps) => {
+  const isNoMallige = entry.noMalligeToday;
+
   return (
-    <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+    <div className={`flex items-center justify-between p-4 rounded-lg transition-colors ${
+      isNoMallige ? 'bg-muted/30 border border-dashed border-muted-foreground/20' : 'bg-muted/50 hover:bg-muted'
+    }`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="font-medium text-foreground">
             {format(parseISO(entry.date), 'dd MMM yyyy')}
           </span>
-          {entry.rateStatus === 'pending' ? (
+          {isNoMallige ? (
+            <Badge variant="outline" className="gap-1 bg-muted text-muted-foreground border-muted-foreground/30">
+              <CalendarOff className="h-3 w-3" />
+              Day Off
+            </Badge>
+          ) : entry.rateStatus === 'pending' ? (
             <Badge variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30">
               <Clock className="h-3 w-3" />
               Pending
@@ -119,23 +128,31 @@ const EntryCard = ({ entry, onDelete }: EntryCardProps) => {
             </Badge>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Package className="h-3.5 w-3.5" />
-            {entry.quantityChendu} chendu ({entry.quantityAtte} atte)
-          </span>
-          {entry.ratePerAtte && (
-            <span>@ ₹{entry.ratePerAtte}/atte</span>
-          )}
-          {entry.flowerShopName && (
-            <span>• {entry.flowerShopName}</span>
-          )}
-        </div>
+        {isNoMallige ? (
+          <p className="text-sm text-muted-foreground italic">
+            {entry.notes || 'No mallige given'}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Package className="h-3.5 w-3.5" />
+              {entry.quantityChendu} chendu ({entry.quantityAtte} atte)
+            </span>
+            {entry.ratePerAtte && (
+              <span>@ ₹{entry.ratePerAtte}/atte</span>
+            )}
+            {entry.flowerShopName && (
+              <span>• {entry.flowerShopName}</span>
+            )}
+          </div>
+        )}
       </div>
       
       <div className="flex items-center gap-3">
         <div className="text-right">
-          {entry.totalAmount ? (
+          {isNoMallige ? (
+            <span className="text-muted-foreground">₹0</span>
+          ) : entry.totalAmount ? (
             <span className="text-lg font-semibold text-foreground flex items-center">
               <IndianRupee className="h-4 w-4" />
               {entry.totalAmount.toLocaleString()}

@@ -2,52 +2,106 @@ import { useState, useEffect, useCallback } from 'react';
 import { DailyEntry, MarketRate, WeeklyEarning, MonthlyStats } from '@/types/mallige';
 import { cacheService } from '@/lib/cache';
 import { useAuth } from './useAuth';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO, subDays } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { format, subDays } from 'date-fns';
 
-// In-memory storage for demo (since MongoDB connection is complex in Edge Functions)
-// In production, this would call the MongoDB Edge Function
-const STORAGE_KEY = 'mallige_data';
+const CACHE_KEY = 'mallige_data';
 
-interface StoredData {
+interface CachedData {
   entries: DailyEntry[];
   rates: MarketRate[];
 }
 
-const getStoredData = (userId: string): StoredData => {
-  const data = localStorage.getItem(`${STORAGE_KEY}_${userId}`);
-  if (data) {
-    return JSON.parse(data);
+// API call to Edge Function
+const mongoApi = async (action: string, payload: Record<string, unknown>) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.access_token) {
+    throw new Error('Not authenticated');
   }
-  return { entries: [], rates: [] };
-};
 
-const saveStoredData = (userId: string, data: StoredData) => {
-  localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify(data));
+  const response = await supabase.functions.invoke('mongodb-api', {
+    body: { ...payload, action },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  });
+
+  if (response.error) {
+    throw new Error(response.error.message);
+  }
+
+  return response.data;
 };
 
 export const useMalligeData = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [rates, setRates] = useState<MarketRate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [todayRate, setTodayRate] = useState<MarketRate | null>(null);
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
-  // Load data on mount
-  useEffect(() => {
-    if (user?.id) {
-      const data = getStoredData(user.id);
-      setEntries(data.entries);
-      setRates(data.rates);
-      
-      // Find today's rate
-      const rate = data.rates.find(r => r.date === today);
+  // Load from cache first, then sync with backend
+  const loadData = useCallback(async () => {
+    if (!user?.id) return;
+
+    // Load from cache first for instant display
+    const cached = cacheService.get<CachedData>(`${CACHE_KEY}_${user.id}`);
+    if (cached) {
+      setEntries(cached.entries);
+      setRates(cached.rates);
+      const rate = cached.rates.find(r => r.date === today);
       setTodayRate(rate || null);
+    }
+
+    setLoading(false);
+
+    // Sync with backend
+    try {
+      setSyncing(true);
+      const result = await mongoApi('sync', { userId: user.id, collection: '' });
       
-      setLoading(false);
+      if (result) {
+        const backendEntries = result.entries || [];
+        const backendRates = result.rates || [];
+        
+        setEntries(backendEntries);
+        setRates(backendRates);
+        
+        const rate = backendRates.find((r: MarketRate) => r.date === today);
+        setTodayRate(rate || null);
+        
+        // Update cache
+        cacheService.set(`${CACHE_KEY}_${user.id}`, {
+          entries: backendEntries,
+          rates: backendRates,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to sync with backend:', err);
+      // Keep using cached/local data
+    } finally {
+      setSyncing(false);
     }
   }, [user?.id, today]);
+
+  useEffect(() => {
+    if (user?.id && session) {
+      loadData();
+    }
+  }, [user?.id, session, loadData]);
+
+  // Update local cache
+  const updateCache = useCallback((newEntries: DailyEntry[], newRates: MarketRate[]) => {
+    if (!user?.id) return;
+    cacheService.set(`${CACHE_KEY}_${user.id}`, {
+      entries: newEntries,
+      rates: newRates,
+    });
+  }, [user?.id]);
 
   // Add new entry
   const addEntry = useCallback(async (entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte'>) => {
@@ -70,15 +124,74 @@ export const useMalligeData = () => {
       updatedAt: new Date().toISOString(),
     };
 
+    // Optimistic update
     const updatedEntries = [...entries, newEntry];
     setEntries(updatedEntries);
-    
-    const data = getStoredData(user.id);
-    data.entries = updatedEntries;
-    saveStoredData(user.id, data);
+    updateCache(updatedEntries, rates);
+
+    // Sync to backend
+    try {
+      const result = await mongoApi('insertOne', {
+        userId: user.id,
+        collection: 'entries',
+        data: newEntry,
+      });
+      
+      if (result?.document) {
+        // Update with backend ID
+        const finalEntry = { ...newEntry, _id: result.insertedId };
+        const finalEntries = updatedEntries.map(e => e.id === newEntry.id ? finalEntry : e);
+        setEntries(finalEntries);
+        updateCache(finalEntries, rates);
+        return finalEntry;
+      }
+    } catch (err) {
+      console.error('Failed to save entry to backend:', err);
+    }
 
     return newEntry;
-  }, [user?.id, entries, rates]);
+  }, [user?.id, entries, rates, updateCache]);
+
+  // Add "No Mallige Today" entry
+  const addNoMalligeEntry = useCallback(async (date: string, notes?: string) => {
+    if (!user?.id) return null;
+
+    const existingEntry = entries.find(e => e.date === date);
+    if (existingEntry) {
+      return null; // Already has an entry for this date
+    }
+
+    const newEntry: DailyEntry = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      date,
+      quantityChendu: 0,
+      quantityAtte: 0,
+      ratePerAtte: null,
+      totalAmount: 0,
+      rateStatus: 'confirmed',
+      noMalligeToday: true,
+      notes: notes || 'No mallige given',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedEntries = [...entries, newEntry];
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
+
+    try {
+      await mongoApi('insertOne', {
+        userId: user.id,
+        collection: 'entries',
+        data: newEntry,
+      });
+    } catch (err) {
+      console.error('Failed to save no-mallige entry:', err);
+    }
+
+    return newEntry;
+  }, [user?.id, entries, rates, updateCache]);
 
   // Add or update rate
   const setRate = useCallback(async (date: string, ratePerAtte: number) => {
@@ -113,7 +226,7 @@ export const useMalligeData = () => {
 
     // Update all pending entries for this date
     const updatedEntries = entries.map(entry => {
-      if (entry.date === date && entry.rateStatus === 'pending') {
+      if (entry.date === date && entry.rateStatus === 'pending' && !entry.noMalligeToday) {
         return {
           ...entry,
           ratePerAtte,
@@ -126,14 +239,44 @@ export const useMalligeData = () => {
     });
 
     setEntries(updatedEntries);
+    updateCache(updatedEntries, updatedRates);
 
-    const data = getStoredData(user.id);
-    data.rates = updatedRates;
-    data.entries = updatedEntries;
-    saveStoredData(user.id, data);
+    // Sync to backend
+    try {
+      if (existingRateIndex >= 0) {
+        await mongoApi('updateOne', {
+          userId: user.id,
+          collection: 'rates',
+          filter: { id: newRate.id },
+          update: { ratePerAtte },
+        });
+      } else {
+        await mongoApi('insertOne', {
+          userId: user.id,
+          collection: 'rates',
+          data: newRate,
+        });
+      }
+
+      // Update pending entries in backend
+      for (const entry of updatedEntries.filter(e => e.date === date && e.rateStatus === 'confirmed')) {
+        await mongoApi('updateOne', {
+          userId: user.id,
+          collection: 'entries',
+          filter: { id: entry.id },
+          update: { 
+            ratePerAtte: entry.ratePerAtte, 
+            totalAmount: entry.totalAmount, 
+            rateStatus: entry.rateStatus 
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Failed to save rate to backend:', err);
+    }
 
     return newRate;
-  }, [user?.id, rates, entries, today]);
+  }, [user?.id, rates, entries, today, updateCache]);
 
   // Delete entry
   const deleteEntry = useCallback(async (id: string) => {
@@ -141,13 +284,20 @@ export const useMalligeData = () => {
 
     const updatedEntries = entries.filter(e => e.id !== id);
     setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
 
-    const data = getStoredData(user.id);
-    data.entries = updatedEntries;
-    saveStoredData(user.id, data);
+    try {
+      await mongoApi('deleteOne', {
+        userId: user.id,
+        collection: 'entries',
+        filter: { id },
+      });
+    } catch (err) {
+      console.error('Failed to delete entry from backend:', err);
+    }
 
     return true;
-  }, [user?.id, entries]);
+  }, [user?.id, entries, rates, updateCache]);
 
   // Get entries for a specific month
   const getEntriesForMonth = useCallback((yearMonth: string) => {
@@ -162,7 +312,7 @@ export const useMalligeData = () => {
     });
 
     return last7Days.map(date => {
-      const dayEntries = entries.filter(e => e.date === date);
+      const dayEntries = entries.filter(e => e.date === date && !e.noMalligeToday);
       const amount = dayEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
       const quantity = dayEntries.reduce((sum, e) => sum + e.quantityAtte, 0);
       return { date, amount, quantity };
@@ -171,7 +321,7 @@ export const useMalligeData = () => {
 
   // Get monthly stats
   const getMonthlyStats = useCallback((yearMonth: string): MonthlyStats => {
-    const monthEntries = entries.filter(e => e.date.startsWith(yearMonth));
+    const monthEntries = entries.filter(e => e.date.startsWith(yearMonth) && !e.noMalligeToday);
     const confirmedEntries = monthEntries.filter(e => e.rateStatus === 'confirmed');
     
     const totalEarnings = confirmedEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
@@ -209,12 +359,24 @@ export const useMalligeData = () => {
     return rates.find(r => r.date === date) || null;
   }, [rates]);
 
+  // Check if entry exists for date
+  const hasEntryForDate = useCallback((date: string) => {
+    return entries.some(e => e.date === date);
+  }, [entries]);
+
+  // Refresh data from backend
+  const refresh = useCallback(() => {
+    loadData();
+  }, [loadData]);
+
   return {
     entries,
     rates,
     loading,
+    syncing,
     todayRate,
     addEntry,
+    addNoMalligeEntry,
     setRate,
     deleteEntry,
     getEntriesForMonth,
@@ -224,5 +386,7 @@ export const useMalligeData = () => {
     getPendingEntriesCount,
     getPendingEntriesCountForDate,
     getRateForDate,
+    hasEntryForDate,
+    refresh,
   };
 };

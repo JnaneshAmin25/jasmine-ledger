@@ -8,6 +8,7 @@ import { WeeklyChart } from '@/components/dashboard/WeeklyChart';
 import { EntryList } from '@/components/dashboard/EntryList';
 import { AddEntryDialog } from '@/components/dashboard/AddEntryDialog';
 import { SetRateDialog } from '@/components/dashboard/SetRateDialog';
+import { NoMalligeDialog } from '@/components/dashboard/NoMalligeDialog';
 import { Loader2 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -48,6 +49,7 @@ const Dashboard = () => {
         <section className="flex flex-wrap gap-3 animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <AddEntryDialog />
           <SetRateDialog />
+          <NoMalligeDialog />
         </section>
 
         {/* Weekly Earnings Chart */}

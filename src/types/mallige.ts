@@ -7,6 +7,7 @@ export interface UserProfile {
 
 export interface DailyEntry {
   id: string;
+  _id?: string; // MongoDB ID
   userId: string;
   date: string; // YYYY-MM-DD
   quantityChendu: number;
@@ -14,6 +15,7 @@ export interface DailyEntry {
   ratePerAtte: number | null;
   totalAmount: number | null;
   rateStatus: 'pending' | 'confirmed';
+  noMalligeToday?: boolean; // true if user marked "no mallige today"
   flowerShopName?: string;
   notes?: string;
   createdAt: string;
@@ -22,6 +24,7 @@ export interface DailyEntry {
 
 export interface MarketRate {
   id: string;
+  _id?: string; // MongoDB ID
   date: string; // YYYY-MM-DD
   ratePerAtte: number;
   enteredBy: string;
