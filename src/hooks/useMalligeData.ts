@@ -12,28 +12,6 @@ interface CachedData {
   rates: MarketRate[];
 }
 
-// API call to Edge Function
-const mongoApi = async (action: string, payload: Record<string, unknown>) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (!session?.access_token) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await supabase.functions.invoke('mongodb-api', {
-    body: { ...payload, action },
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
-  });
-
-  if (response.error) {
-    throw new Error(response.error.message);
-  }
-
-  return response.data;
-};
-
 export const useMalligeData = () => {
   const { user, session } = useAuth();
   const [entries, setEntries] = useState<DailyEntry[]>([]);
@@ -44,7 +22,7 @@ export const useMalligeData = () => {
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
-  // Load from cache first, then sync with backend
+  // Load from cache first, then sync with Supabase
   const loadData = useCallback(async () => {
     if (!user?.id) return;
 
@@ -59,30 +37,55 @@ export const useMalligeData = () => {
 
     setLoading(false);
 
-    // Sync with backend
+    // Sync with Supabase
     try {
       setSyncing(true);
-      const result = await mongoApi('sync', { userId: user.id, collection: '' });
       
-      if (result) {
-        const backendEntries = result.entries || [];
-        const backendRates = result.rates || [];
-        
-        setEntries(backendEntries);
-        setRates(backendRates);
-        
-        const rate = backendRates.find((r: MarketRate) => r.date === today);
-        setTodayRate(rate || null);
-        
-        // Update cache
-        cacheService.set(`${CACHE_KEY}_${user.id}`, {
-          entries: backendEntries,
-          rates: backendRates,
-        });
-      }
+      const [entriesResult, ratesResult] = await Promise.all([
+        supabase.from('mallige_entries').select('*').eq('user_id', user.id),
+        supabase.from('mallige_rates').select('*').eq('user_id', user.id),
+      ]);
+
+      if (entriesResult.error) throw entriesResult.error;
+      if (ratesResult.error) throw ratesResult.error;
+
+      // Map database rows to app types
+      const backendEntries: DailyEntry[] = (entriesResult.data || []).map(row => ({
+        id: row.id,
+        userId: row.user_id,
+        date: row.date,
+        quantityChendu: row.quantity,
+        quantityAtte: row.quantity / 4,
+        ratePerAtte: row.rate_per_atte,
+        totalAmount: row.earnings,
+        rateStatus: row.rate_status as 'pending' | 'confirmed',
+        noMalligeToday: row.no_mallige_today,
+        notes: row.notes,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+
+      const backendRates: MarketRate[] = (ratesResult.data || []).map(row => ({
+        id: row.id,
+        date: row.date,
+        ratePerAtte: row.rate_per_atte,
+        enteredBy: row.user_id,
+        createdAt: row.created_at,
+      }));
+
+      setEntries(backendEntries);
+      setRates(backendRates);
+      
+      const rate = backendRates.find((r: MarketRate) => r.date === today);
+      setTodayRate(rate || null);
+      
+      // Update cache
+      cacheService.set(`${CACHE_KEY}_${user.id}`, {
+        entries: backendEntries,
+        rates: backendRates,
+      });
     } catch (err) {
       console.error('Failed to sync with backend:', err);
-      // Keep using cached/local data
     } finally {
       setSyncing(false);
     }
@@ -112,42 +115,42 @@ export const useMalligeData = () => {
     const rateStatus = rateForDate ? 'confirmed' : 'pending';
     const totalAmount = rateForDate ? quantityAtte * rateForDate.ratePerAtte : null;
 
+    // Insert to Supabase
+    const { data, error } = await supabase.from('mallige_entries').insert({
+      user_id: user.id,
+      date: entry.date,
+      quantity: entry.quantityChendu,
+      unit: 'chendu',
+      rate_per_atte: rateForDate?.ratePerAtte || null,
+      earnings: totalAmount,
+      rate_status: rateStatus,
+      notes: entry.notes,
+      no_mallige_today: false,
+    }).select().single();
+
+    if (error) {
+      console.error('Failed to save entry:', error);
+      return null;
+    }
+
     const newEntry: DailyEntry = {
-      id: crypto.randomUUID(),
+      id: data.id,
       userId: user.id,
-      ...entry,
-      quantityAtte,
-      ratePerAtte: rateForDate?.ratePerAtte || null,
-      totalAmount,
-      rateStatus,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      date: data.date,
+      quantityChendu: data.quantity,
+      quantityAtte: data.quantity / 4,
+      ratePerAtte: data.rate_per_atte,
+      totalAmount: data.earnings,
+      rateStatus: data.rate_status as 'pending' | 'confirmed',
+      noMalligeToday: data.no_mallige_today,
+      notes: data.notes,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
 
-    // Optimistic update
     const updatedEntries = [...entries, newEntry];
     setEntries(updatedEntries);
     updateCache(updatedEntries, rates);
-
-    // Sync to backend
-    try {
-      const result = await mongoApi('insertOne', {
-        userId: user.id,
-        collection: 'entries',
-        data: newEntry,
-      });
-      
-      if (result?.document) {
-        // Update with backend ID
-        const finalEntry = { ...newEntry, _id: result.insertedId };
-        const finalEntries = updatedEntries.map(e => e.id === newEntry.id ? finalEntry : e);
-        setEntries(finalEntries);
-        updateCache(finalEntries, rates);
-        return finalEntry;
-      }
-    } catch (err) {
-      console.error('Failed to save entry to backend:', err);
-    }
 
     return newEntry;
   }, [user?.id, entries, rates, updateCache]);
@@ -158,37 +161,44 @@ export const useMalligeData = () => {
 
     const existingEntry = entries.find(e => e.date === date);
     if (existingEntry) {
-      return null; // Already has an entry for this date
+      return null;
+    }
+
+    const { data, error } = await supabase.from('mallige_entries').insert({
+      user_id: user.id,
+      date,
+      quantity: 0,
+      unit: 'chendu',
+      rate_per_atte: null,
+      earnings: 0,
+      rate_status: 'confirmed',
+      notes: notes || 'No mallige given',
+      no_mallige_today: true,
+    }).select().single();
+
+    if (error) {
+      console.error('Failed to save no-mallige entry:', error);
+      return null;
     }
 
     const newEntry: DailyEntry = {
-      id: crypto.randomUUID(),
+      id: data.id,
       userId: user.id,
-      date,
+      date: data.date,
       quantityChendu: 0,
       quantityAtte: 0,
       ratePerAtte: null,
       totalAmount: 0,
       rateStatus: 'confirmed',
       noMalligeToday: true,
-      notes: notes || 'No mallige given',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      notes: data.notes,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
 
     const updatedEntries = [...entries, newEntry];
     setEntries(updatedEntries);
     updateCache(updatedEntries, rates);
-
-    try {
-      await mongoApi('insertOne', {
-        userId: user.id,
-        collection: 'entries',
-        data: newEntry,
-      });
-    } catch (err) {
-      console.error('Failed to save no-mallige entry:', err);
-    }
 
     return newEntry;
   }, [user?.id, entries, rates, updateCache]);
@@ -197,24 +207,42 @@ export const useMalligeData = () => {
   const setRate = useCallback(async (date: string, ratePerAtte: number) => {
     if (!user?.id) return null;
 
-    const existingRateIndex = rates.findIndex(r => r.date === date);
-    let updatedRates: MarketRate[];
+    const existingRate = rates.find(r => r.date === date);
     let newRate: MarketRate;
+    let updatedRates: MarketRate[];
 
-    if (existingRateIndex >= 0) {
-      newRate = {
-        ...rates[existingRateIndex],
-        ratePerAtte,
-      };
-      updatedRates = [...rates];
-      updatedRates[existingRateIndex] = newRate;
+    if (existingRate) {
+      // Update existing rate
+      const { error } = await supabase.from('mallige_rates')
+        .update({ rate_per_atte: ratePerAtte })
+        .eq('id', existingRate.id);
+
+      if (error) {
+        console.error('Failed to update rate:', error);
+        return null;
+      }
+
+      newRate = { ...existingRate, ratePerAtte };
+      updatedRates = rates.map(r => r.id === existingRate.id ? newRate : r);
     } else {
-      newRate = {
-        id: crypto.randomUUID(),
+      // Insert new rate
+      const { data, error } = await supabase.from('mallige_rates').insert({
+        user_id: user.id,
         date,
-        ratePerAtte,
+        rate_per_atte: ratePerAtte,
+      }).select().single();
+
+      if (error) {
+        console.error('Failed to save rate:', error);
+        return null;
+      }
+
+      newRate = {
+        id: data.id,
+        date: data.date,
+        ratePerAtte: data.rate_per_atte,
         enteredBy: user.id,
-        createdAt: new Date().toISOString(),
+        createdAt: data.created_at,
       };
       updatedRates = [...rates, newRate];
     }
@@ -225,54 +253,36 @@ export const useMalligeData = () => {
     }
 
     // Update all pending entries for this date
-    const updatedEntries = entries.map(entry => {
-      if (entry.date === date && entry.rateStatus === 'pending' && !entry.noMalligeToday) {
-        return {
-          ...entry,
-          ratePerAtte,
-          totalAmount: entry.quantityAtte * ratePerAtte,
-          rateStatus: 'confirmed' as const,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return entry;
-    });
+    const pendingEntries = entries.filter(e => e.date === date && e.rateStatus === 'pending' && !e.noMalligeToday);
+    
+    if (pendingEntries.length > 0) {
+      const updatePromises = pendingEntries.map(entry => 
+        supabase.from('mallige_entries').update({
+          rate_per_atte: ratePerAtte,
+          earnings: entry.quantityAtte * ratePerAtte,
+          rate_status: 'confirmed',
+        }).eq('id', entry.id)
+      );
 
-    setEntries(updatedEntries);
-    updateCache(updatedEntries, updatedRates);
+      await Promise.all(updatePromises);
 
-    // Sync to backend
-    try {
-      if (existingRateIndex >= 0) {
-        await mongoApi('updateOne', {
-          userId: user.id,
-          collection: 'rates',
-          filter: { id: newRate.id },
-          update: { ratePerAtte },
-        });
-      } else {
-        await mongoApi('insertOne', {
-          userId: user.id,
-          collection: 'rates',
-          data: newRate,
-        });
-      }
+      const updatedEntries = entries.map(entry => {
+        if (entry.date === date && entry.rateStatus === 'pending' && !entry.noMalligeToday) {
+          return {
+            ...entry,
+            ratePerAtte,
+            totalAmount: entry.quantityAtte * ratePerAtte,
+            rateStatus: 'confirmed' as const,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return entry;
+      });
 
-      // Update pending entries in backend
-      for (const entry of updatedEntries.filter(e => e.date === date && e.rateStatus === 'confirmed')) {
-        await mongoApi('updateOne', {
-          userId: user.id,
-          collection: 'entries',
-          filter: { id: entry.id },
-          update: { 
-            ratePerAtte: entry.ratePerAtte, 
-            totalAmount: entry.totalAmount, 
-            rateStatus: entry.rateStatus 
-          },
-        });
-      }
-    } catch (err) {
-      console.error('Failed to save rate to backend:', err);
+      setEntries(updatedEntries);
+      updateCache(updatedEntries, updatedRates);
+    } else {
+      updateCache(entries, updatedRates);
     }
 
     return newRate;
@@ -282,19 +292,16 @@ export const useMalligeData = () => {
   const deleteEntry = useCallback(async (id: string) => {
     if (!user?.id) return false;
 
+    const { error } = await supabase.from('mallige_entries').delete().eq('id', id);
+    
+    if (error) {
+      console.error('Failed to delete entry:', error);
+      return false;
+    }
+
     const updatedEntries = entries.filter(e => e.id !== id);
     setEntries(updatedEntries);
     updateCache(updatedEntries, rates);
-
-    try {
-      await mongoApi('deleteOne', {
-        userId: user.id,
-        collection: 'entries',
-        filter: { id },
-      });
-    } catch (err) {
-      console.error('Failed to delete entry from backend:', err);
-    }
 
     return true;
   }, [user?.id, entries, rates, updateCache]);
