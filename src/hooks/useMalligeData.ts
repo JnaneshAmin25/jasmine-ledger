@@ -194,10 +194,20 @@ export const useMalligeData = () => {
     return entries.filter(e => e.date === today);
   }, [entries, today]);
 
-  // Get pending entries count
+  // Get pending entries count (all)
   const getPendingEntriesCount = useCallback(() => {
     return entries.filter(e => e.rateStatus === 'pending').length;
   }, [entries]);
+
+  // Get pending entries count for a specific date
+  const getPendingEntriesCountForDate = useCallback((date: string) => {
+    return entries.filter(e => e.date === date && e.rateStatus === 'pending').length;
+  }, [entries]);
+
+  // Get rate for a specific date
+  const getRateForDate = useCallback((date: string) => {
+    return rates.find(r => r.date === date) || null;
+  }, [rates]);
 
   return {
     entries,
@@ -212,5 +222,7 @@ export const useMalligeData = () => {
     getMonthlyStats,
     getTodayEntries,
     getPendingEntriesCount,
+    getPendingEntriesCountForDate,
+    getRateForDate,
   };
 };

@@ -47,7 +47,7 @@ const Dashboard = () => {
         {/* Quick Actions */}
         <section className="flex flex-wrap gap-3 animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <AddEntryDialog />
-          <SetRateDialog currentRate={todayRate} />
+          <SetRateDialog />
         </section>
 
         {/* Weekly Earnings Chart */}
