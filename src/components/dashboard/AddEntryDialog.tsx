@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog,
   DialogContent,
@@ -13,26 +14,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { Plus, Package, Store, FileText, Loader2 } from 'lucide-react';
+import { Plus, Package, Store, FileText, Loader2, CalendarIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export const AddEntryDialog = () => {
-  const { addEntry, todayRate } = useMalligeData();
+  const { addEntry, getRateForDate } = useMalligeData();
   const { toast } = useToast();
   
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [quantityChendu, setQuantityChendu] = useState('');
   const [flowerShopName, setFlowerShopName] = useState('');
   const [notes, setNotes] = useState('');
 
+  const dateStr = format(selectedDate, 'yyyy-MM-dd');
+  const rateForDate = getRateForDate(dateStr);
   const quantityAtte = quantityChendu ? parseFloat(quantityChendu) / 4 : 0;
-  const estimatedAmount = todayRate && date === format(new Date(), 'yyyy-MM-dd') 
-    ? quantityAtte * todayRate.ratePerAtte 
-    : null;
+  const estimatedAmount = rateForDate ? quantityAtte * rateForDate.ratePerAtte : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +47,7 @@ export const AddEntryDialog = () => {
 
     try {
       const entry = await addEntry({
-        date,
+        date: dateStr,
         quantityChendu: parseFloat(quantityChendu),
         flowerShopName: flowerShopName || undefined,
         notes: notes || undefined,
@@ -50,14 +57,15 @@ export const AddEntryDialog = () => {
         toast({
           title: 'Entry Added',
           description: entry.rateStatus === 'pending' 
-            ? 'Entry saved. Amount will be calculated when rate is set.'
-            : `₹${entry.totalAmount?.toLocaleString()} earned!`,
+            ? `Entry for ${format(selectedDate, 'dd MMM')} saved. Amount will be calculated when rate is set.`
+            : `₹${entry.totalAmount?.toLocaleString()} earned on ${format(selectedDate, 'dd MMM')}!`,
         });
         
         // Reset form
         setQuantityChendu('');
         setFlowerShopName('');
         setNotes('');
+        setSelectedDate(new Date());
         setOpen(false);
       }
     } catch (err) {
@@ -81,23 +89,51 @@ export const AddEntryDialog = () => {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="font-display">Add Daily Entry</DialogTitle>
+          <DialogTitle className="font-display">Add Entry</DialogTitle>
           <DialogDescription>
-            Record your mallige delivery for today
+            Record your mallige delivery for any date
           </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="date">Date</Label>
-            <Input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              max={format(new Date(), 'yyyy-MM-dd')}
-              required
-            />
+            <Label className="flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              Date
+            </Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !selectedDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {format(selectedDate, 'PPP')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  disabled={(date) => date > new Date()}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            {rateForDate ? (
+              <p className="text-sm text-success">
+                Rate: ₹{rateForDate.ratePerAtte}/atte
+              </p>
+            ) : (
+              <p className="text-sm text-warning">
+                No rate set for this date yet
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
