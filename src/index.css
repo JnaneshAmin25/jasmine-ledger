@@ -149,6 +149,11 @@
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
+
+  /* Reduced padding on mobile for container */
+  .container {
+    @apply px-3 sm:px-6 lg:px-8;
+  }
 }
 
 @layer utilities {
