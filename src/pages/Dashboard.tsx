@@ -9,6 +9,7 @@ import { EntryList } from '@/components/dashboard/EntryList';
 import { AddEntryDialog } from '@/components/dashboard/AddEntryDialog';
 import { SetRateDialog } from '@/components/dashboard/SetRateDialog';
 import { NoMalligeDialog } from '@/components/dashboard/NoMalligeDialog';
+import { RateCalculatorDialog } from '@/components/dashboard/RateCalculatorDialog';
 import { Loader2 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -50,6 +51,7 @@ const Dashboard = () => {
           <AddEntryDialog />
           <SetRateDialog />
           <NoMalligeDialog />
+          <RateCalculatorDialog />
         </section>
 
         {/* Weekly Earnings Chart */}

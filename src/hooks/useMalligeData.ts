@@ -97,6 +97,127 @@ export const useMalligeData = () => {
     }
   }, [user?.id, session, loadData]);
 
+  // Subscribe to realtime changes
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const entriesChannel = supabase
+      .channel('mallige-entries-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mallige_entries',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Realtime entry update:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new as any;
+            const newEntry: DailyEntry = {
+              id: row.id,
+              userId: row.user_id,
+              date: row.date,
+              quantityChendu: row.quantity,
+              quantityAtte: row.quantity / 4,
+              ratePerAtte: row.rate_per_atte,
+              totalAmount: row.earnings,
+              rateStatus: row.rate_status as 'pending' | 'confirmed',
+              noMalligeToday: row.no_mallige_today,
+              notes: row.notes,
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            };
+            setEntries(prev => {
+              const exists = prev.some(e => e.id === newEntry.id);
+              return exists ? prev : [...prev, newEntry];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const row = payload.new as any;
+            setEntries(prev => prev.map(e => {
+              if (e.id === row.id) {
+                return {
+                  ...e,
+                  quantityChendu: row.quantity,
+                  quantityAtte: row.quantity / 4,
+                  ratePerAtte: row.rate_per_atte,
+                  totalAmount: row.earnings,
+                  rateStatus: row.rate_status as 'pending' | 'confirmed',
+                  noMalligeToday: row.no_mallige_today,
+                  notes: row.notes,
+                  updatedAt: row.updated_at,
+                };
+              }
+              return e;
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old as any;
+            setEntries(prev => prev.filter(e => e.id !== oldRow.id));
+          }
+        }
+      )
+      .subscribe();
+
+    const ratesChannel = supabase
+      .channel('mallige-rates-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mallige_rates',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Realtime rate update:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new as any;
+            const newRate: MarketRate = {
+              id: row.id,
+              date: row.date,
+              ratePerAtte: row.rate_per_atte,
+              enteredBy: row.user_id,
+              createdAt: row.created_at,
+            };
+            setRates(prev => {
+              const exists = prev.some(r => r.id === newRate.id);
+              return exists ? prev : [...prev, newRate];
+            });
+            if (row.date === today) {
+              setTodayRate(newRate);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const row = payload.new as any;
+            setRates(prev => prev.map(r => {
+              if (r.id === row.id) {
+                const updated = { ...r, ratePerAtte: row.rate_per_atte };
+                if (row.date === today) {
+                  setTodayRate(updated);
+                }
+                return updated;
+              }
+              return r;
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old as any;
+            setRates(prev => prev.filter(r => r.id !== oldRow.id));
+            if (oldRow.date === today) {
+              setTodayRate(null);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(entriesChannel);
+      supabase.removeChannel(ratesChannel);
+    };
+  }, [user?.id, today]);
+
   // Update local cache
   const updateCache = useCallback((newEntries: DailyEntry[], newRates: MarketRate[]) => {
     if (!user?.id) return;
