@@ -172,6 +172,7 @@ export const useMalligeData = () => {
         },
         (payload) => {
           console.log('Realtime rate update:', payload);
+          const currentToday = format(new Date(), 'yyyy-MM-dd');
           
           if (payload.eventType === 'INSERT') {
             const row = payload.new as any;
@@ -186,25 +187,28 @@ export const useMalligeData = () => {
               const exists = prev.some(r => r.id === newRate.id);
               return exists ? prev : [...prev, newRate];
             });
-            if (row.date === today) {
+            // Update todayRate immediately if this is today's rate
+            if (row.date === currentToday) {
               setTodayRate(newRate);
             }
           } else if (payload.eventType === 'UPDATE') {
             const row = payload.new as any;
-            setRates(prev => prev.map(r => {
-              if (r.id === row.id) {
-                const updated = { ...r, ratePerAtte: row.rate_per_atte };
-                if (row.date === today) {
-                  setTodayRate(updated);
-                }
-                return updated;
-              }
-              return r;
-            }));
+            const updatedRate: MarketRate = {
+              id: row.id,
+              date: row.date,
+              ratePerAtte: row.rate_per_atte,
+              enteredBy: row.user_id,
+              createdAt: row.created_at,
+            };
+            setRates(prev => prev.map(r => r.id === row.id ? updatedRate : r));
+            // Update todayRate immediately if this is today's rate
+            if (row.date === currentToday) {
+              setTodayRate(updatedRate);
+            }
           } else if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as any;
             setRates(prev => prev.filter(r => r.id !== oldRow.id));
-            if (oldRow.date === today) {
+            if (oldRow.date === currentToday) {
               setTodayRate(null);
             }
           }
