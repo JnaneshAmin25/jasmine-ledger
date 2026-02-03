@@ -23,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { format, parseISO, subMonths } from 'date-fns';
-import { Trash2, Package, IndianRupee, Clock, Calendar, CalendarOff } from 'lucide-react';
+import { Trash2, Package, IndianRupee, Clock, Calendar, CalendarOff, FileText, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export const EntryList = () => {
@@ -47,6 +47,10 @@ export const EntryList = () => {
     b.date.localeCompare(a.date)
   );
 
+  // Calculate month total
+  const monthTotal = sortedEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+  const monthQuantity = sortedEntries.reduce((sum, e) => sum + e.quantityAtte, 0);
+
   const handleDelete = async (id: string) => {
     const success = await deleteEntry(id);
     if (success) {
@@ -58,16 +62,27 @@ export const EntryList = () => {
   };
 
   return (
-    <Card className="border-0 shadow-md">
-      <CardHeader className="pb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <CardTitle className="text-lg font-semibold">Entries</CardTitle>
+    <Card className="border-0 shadow-lg overflow-hidden">
+      <CardHeader className="pb-4 bg-gradient-to-r from-accent/5 to-transparent">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-accent/10">
+              <FileText className="h-5 w-5 text-accent" />
+            </div>
+            <div>
+              <CardTitle className="text-lg font-semibold">Entries</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {sortedEntries.length} entries • ₹{monthTotal.toLocaleString()} total
+              </p>
+            </div>
+          </div>
+          
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[180px] rounded-xl">
               <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-xl">
               {monthOptions.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -77,16 +92,24 @@ export const EntryList = () => {
           </Select>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-2">
         {sortedEntries.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No entries for {monthOptions.find(m => m.value === selectedMonth)?.label}</p>
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/50 mb-4">
+              <Package className="h-8 w-8 text-muted-foreground/50" />
+            </div>
+            <p className="text-muted-foreground font-medium">No entries for {monthOptions.find(m => m.value === selectedMonth)?.label}</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">Add your first entry to get started</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {sortedEntries.map((entry) => (
-              <EntryCard key={entry.id} entry={entry} onDelete={handleDelete} />
+          <div className="space-y-2">
+            {sortedEntries.map((entry, index) => (
+              <EntryCard 
+                key={entry.id} 
+                entry={entry} 
+                onDelete={handleDelete}
+                isFirst={index === 0}
+              />
             ))}
           </div>
         )}
@@ -98,19 +121,25 @@ export const EntryList = () => {
 interface EntryCardProps {
   entry: DailyEntry;
   onDelete: (id: string) => void;
+  isFirst?: boolean;
 }
 
-const EntryCard = ({ entry, onDelete }: EntryCardProps) => {
+const EntryCard = ({ entry, onDelete, isFirst }: EntryCardProps) => {
   const isNoMallige = entry.noMalligeToday;
 
   return (
-    <div className={`flex items-center justify-between p-4 rounded-lg transition-colors ${
-      isNoMallige ? 'bg-muted/30 border border-dashed border-muted-foreground/20' : 'bg-muted/50 hover:bg-muted'
-    }`}>
+    <div className={`group flex items-center justify-between p-4 rounded-xl transition-all duration-200 ${
+      isNoMallige 
+        ? 'bg-muted/30 border border-dashed border-muted-foreground/20' 
+        : 'bg-muted/50 hover:bg-muted border border-transparent hover:border-border/50'
+    } ${isFirst ? 'ring-2 ring-primary/10' : ''}`}>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium text-foreground">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="font-semibold text-foreground">
             {format(parseISO(entry.date), 'dd MMM yyyy')}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {format(parseISO(entry.date), 'EEEE')}
           </span>
           {isNoMallige ? (
             <Badge variant="outline" className="gap-1 bg-muted text-muted-foreground border-muted-foreground/30">
@@ -118,7 +147,7 @@ const EntryCard = ({ entry, onDelete }: EntryCardProps) => {
               Day Off
             </Badge>
           ) : entry.rateStatus === 'pending' ? (
-            <Badge variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30">
+            <Badge variant="outline" className="gap-1 bg-warning/10 text-warning border-warning/30 animate-pulse">
               <Clock className="h-3 w-3" />
               Pending
             </Badge>
@@ -134,29 +163,30 @@ const EntryCard = ({ entry, onDelete }: EntryCardProps) => {
           </p>
         ) : (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Package className="h-3.5 w-3.5" />
-              {entry.quantityChendu} chendu ({entry.quantityAtte} atte)
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              <Package className="h-3.5 w-3.5 text-primary" />
+              {entry.quantityChendu} chendu
             </span>
+            <span className="text-muted-foreground">({entry.quantityAtte} atte)</span>
             {entry.ratePerAtte && (
-              <span>@ ₹{entry.ratePerAtte}/atte</span>
+              <span className="text-muted-foreground">@ ₹{entry.ratePerAtte}/atte</span>
             )}
             {entry.flowerShopName && (
-              <span>• {entry.flowerShopName}</span>
+              <span className="hidden sm:inline">• {entry.flowerShopName}</span>
             )}
           </div>
         )}
       </div>
       
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <div className="text-right">
           {isNoMallige ? (
-            <span className="text-muted-foreground">₹0</span>
+            <span className="text-muted-foreground font-medium">₹0</span>
           ) : entry.totalAmount ? (
-            <span className="text-lg font-semibold text-foreground flex items-center">
+            <div className="flex items-center text-lg font-bold text-success">
               <IndianRupee className="h-4 w-4" />
-              {entry.totalAmount.toLocaleString()}
-            </span>
+              <span>{entry.totalAmount.toLocaleString()}</span>
+            </div>
           ) : (
             <span className="text-muted-foreground">—</span>
           )}
@@ -164,22 +194,27 @@ const EntryCard = ({ entry, onDelete }: EntryCardProps) => {
         
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent>
+          <AlertDialogContent className="rounded-2xl">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Entry?</AlertDialogTitle>
               <AlertDialogDescription>
                 This will permanently delete this entry from {format(parseISO(entry.date), 'dd MMMM yyyy')}.
+                This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
               <AlertDialogAction 
                 onClick={() => onDelete(entry.id)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl"
               >
                 Delete
               </AlertDialogAction>

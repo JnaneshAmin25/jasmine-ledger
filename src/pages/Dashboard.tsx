@@ -10,12 +10,12 @@ import { AddEntryDialog } from '@/components/dashboard/AddEntryDialog';
 import { SetRateDialog } from '@/components/dashboard/SetRateDialog';
 import { NoMalligeDialog } from '@/components/dashboard/NoMalligeDialog';
 import { RateCalculatorDialog } from '@/components/dashboard/RateCalculatorDialog';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, TrendingUp, CalendarX, Calculator } from 'lucide-react';
 
 const Dashboard = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const navigate = useNavigate();
-  const { todayRate, getWeeklyEarnings, getPendingEntriesCount, loading: dataLoading } = useMalligeData();
+  const { todayRate, getWeeklyEarnings, getPendingEntriesCount, loading: dataLoading, syncing } = useMalligeData();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -25,8 +25,11 @@ const Dashboard = () => {
 
   if (authLoading || dataLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center gradient-hero">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex flex-col items-center justify-center gradient-hero gap-4">
+        <div className="p-4 rounded-2xl gradient-primary shadow-glow animate-pulse-glow">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-foreground" />
+        </div>
+        <p className="text-muted-foreground animate-pulse">Loading your data...</p>
       </div>
     );
   }
@@ -40,18 +43,28 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container py-6 space-y-6">
+      <main className="container py-6 md:py-8 space-y-6 md:space-y-8">
+        {/* Syncing indicator */}
+        {syncing && (
+          <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full bg-card shadow-lg border animate-fade-in">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Syncing...</span>
+          </div>
+        )}
+
         {/* Rate Display Section */}
         <section className="animate-fade-in">
           <RateDisplay rate={todayRate} pendingCount={pendingCount} />
         </section>
 
         {/* Quick Actions */}
-        <section className="flex flex-wrap gap-3 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <AddEntryDialog />
-          <SetRateDialog />
-          <NoMalligeDialog />
-          <RateCalculatorDialog />
+        <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+          <div className="flex flex-wrap gap-3">
+            <AddEntryDialog />
+            <SetRateDialog />
+            <NoMalligeDialog />
+            <RateCalculatorDialog />
+          </div>
         </section>
 
         {/* Weekly Earnings Chart */}
