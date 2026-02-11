@@ -18,6 +18,7 @@ export interface DailyEntry {
   noMalligeToday?: boolean; // true if user marked "no mallige today"
   flowerShopName?: string;
   notes?: string;
+  paymentReceived: boolean;
   createdAt: string;
   updatedAt: string;
 }

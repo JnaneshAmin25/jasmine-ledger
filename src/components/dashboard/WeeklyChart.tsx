@@ -1,13 +1,21 @@
+import { useState } from 'react';
 import { WeeklyEarning } from '@/types/mallige';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { format, parseISO, isToday } from 'date-fns';
-import { Calendar } from 'lucide-react';
+import { format, parseISO, isToday, startOfWeek, endOfWeek, addWeeks } from 'date-fns';
+import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useMalligeData } from '@/hooks/useMalligeData';
 
-interface WeeklyChartProps {
-  data: WeeklyEarning[];
-}
+export const WeeklyChart = () => {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const { getWeeklyEarnings } = useMalligeData();
+  const data = getWeeklyEarnings(weekOffset);
 
-export const WeeklyChart = ({ data }: WeeklyChartProps) => {
+  const referenceDate = weekOffset === 0 ? new Date() : addWeeks(new Date(), weekOffset);
+  const weekStart = startOfWeek(referenceDate, { weekStartsOn: 0 });
+  const weekEnd = endOfWeek(referenceDate, { weekStartsOn: 0 });
+  const weekLabel = `${format(weekStart, 'dd MMM')} - ${format(weekEnd, 'dd MMM')}`;
+
   const chartData = data.map(d => ({
     ...d,
     day: format(parseISO(d.date), 'EEE'),
@@ -17,7 +25,6 @@ export const WeeklyChart = ({ data }: WeeklyChartProps) => {
 
   const totalEarnings = data.reduce((sum, d) => sum + d.amount, 0);
   const totalQuantity = data.reduce((sum, d) => sum + d.quantity, 0);
-  const avgDaily = totalEarnings / 7;
 
   return (
     <div className="rounded-xl bg-card shadow-md overflow-hidden">
@@ -28,24 +35,35 @@ export const WeeklyChart = ({ data }: WeeklyChartProps) => {
               <Calendar className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h3 className="text-base font-semibold">This Week</h3>
-              <p className="text-[10px] text-muted-foreground">Last 7 days</p>
+              <h3 className="text-base font-semibold">Weekly Earnings</h3>
+              <p className="text-[10px] text-muted-foreground">Sun – Sat</p>
             </div>
           </div>
           
-          <div className="flex gap-4 text-sm">
-            <div className="text-center">
-              <p className="text-lg font-bold text-gradient">₹{totalEarnings.toLocaleString()}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
-            </div>
-            <div className="text-center border-l pl-4">
-              <p className="text-lg font-bold text-foreground">{totalQuantity.toFixed(1)}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Atte</p>
-            </div>
-            <div className="text-center border-l pl-4 hidden sm:block">
-              <p className="text-lg font-bold text-muted-foreground">₹{avgDaily.toFixed(0)}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg/Day</p>
-            </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setWeekOffset(w => w - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs font-medium min-w-[110px] text-center">{weekLabel}</span>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setWeekOffset(w => Math.min(w + 1, 0))} disabled={weekOffset >= 0}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            {weekOffset !== 0 && (
+              <Button variant="outline" size="sm" className="text-xs h-7 rounded-lg" onClick={() => setWeekOffset(0)}>
+                This week
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-4 text-sm mt-2">
+          <div className="text-center">
+            <p className="text-lg font-bold text-gradient">₹{totalEarnings.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
+          </div>
+          <div className="text-center border-l pl-4">
+            <p className="text-lg font-bold text-foreground">{totalQuantity.toFixed(1)}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Atte</p>
           </div>
         </div>
       </div>

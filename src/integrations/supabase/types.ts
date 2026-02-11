@@ -22,6 +22,7 @@ export type Database = {
           id: string
           no_mallige_today: boolean
           notes: string | null
+          payment_received: boolean
           quantity: number
           rate_per_atte: number | null
           rate_status: string
@@ -36,6 +37,7 @@ export type Database = {
           id?: string
           no_mallige_today?: boolean
           notes?: string | null
+          payment_received?: boolean
           quantity: number
           rate_per_atte?: number | null
           rate_status?: string
@@ -50,6 +52,7 @@ export type Database = {
           id?: string
           no_mallige_today?: boolean
           notes?: string | null
+          payment_received?: boolean
           quantity?: number
           rate_per_atte?: number | null
           rate_status?: string
