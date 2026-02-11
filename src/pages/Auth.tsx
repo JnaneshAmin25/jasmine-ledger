@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Flower2, Mail, Lock, User, Loader2, Sparkles, ArrowRight, Shield, BarChart3, TrendingUp, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 const TRUST_POINTS = [
   { icon: Shield, title: 'Secure & Private', desc: 'Your data is encrypted and only visible to you' },
@@ -41,6 +42,10 @@ const Auth = () => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
   
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -110,13 +115,37 @@ const Auth = () => {
       } else {
         // Silently notify owner
         notifyNewUser(signupEmail, signupName);
-        toast({ title: 'Account Created!', description: 'Welcome to Mallige Manager.' });
-        navigate('/');
+        // Show OTP verification
+        setOtpEmail(signupEmail);
+        setShowOtp(true);
+        toast({ title: 'Check your email', description: 'We sent a 6-digit verification code to your email.' });
       }
     } catch {
       toast({ title: 'Error', description: 'Something went wrong. Please try again.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpValue.length !== 6) return;
+    setOtpVerifying(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: otpEmail,
+        token: otpValue,
+        type: 'signup',
+      });
+      if (error) {
+        toast({ title: 'Verification Failed', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Account Verified!', description: 'Welcome to Mallige Manager.' });
+        navigate('/');
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Verification failed. Please try again.', variant: 'destructive' });
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
@@ -203,6 +232,46 @@ const Auth = () => {
           </p>
         </div>
 
+        {showOtp ? (
+          <Card className="w-full max-w-md shadow-xl border-0 relative z-10 animate-scale-in overflow-hidden">
+            <div className="absolute inset-0 gradient-card" />
+            <CardHeader className="relative pb-4 pt-8 text-center">
+              <div className="mx-auto mb-4 p-4 rounded-2xl gradient-primary shadow-glow w-fit">
+                <Mail className="h-8 w-8 text-primary-foreground" />
+              </div>
+              <CardTitle className="text-2xl font-display">Verify Your Email</CardTitle>
+              <CardDescription>Enter the 6-digit code sent to <span className="font-semibold text-foreground">{otpEmail}</span></CardDescription>
+            </CardHeader>
+            <CardContent className="relative space-y-6 pb-8">
+              <div className="flex justify-center">
+                <InputOTP maxLength={6} value={otpValue} onChange={setOtpValue}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+              <Button
+                onClick={handleVerifyOtp}
+                className="w-full h-12 gradient-primary text-primary-foreground font-semibold shadow-lg hover:shadow-xl hover:shadow-primary/25 transition-all rounded-xl"
+                disabled={otpValue.length !== 6 || otpVerifying}
+              >
+                {otpVerifying ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Verify & Continue'}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={() => { setShowOtp(false); setOtpValue(''); }}
+              >
+                Back to Sign Up
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <Card className="w-full max-w-md shadow-xl border-0 relative z-10 animate-scale-in overflow-hidden">
           <div className="absolute inset-0 gradient-card" />
           
@@ -345,6 +414,7 @@ const Auth = () => {
             </TabsContent>
           </Tabs>
         </Card>
+        )}
 
         {/* Mobile trust badges */}
         <div className="lg:hidden mt-6 grid grid-cols-2 gap-3 max-w-md w-full relative z-10 animate-fade-in" style={{ animationDelay: '0.3s' }}>
