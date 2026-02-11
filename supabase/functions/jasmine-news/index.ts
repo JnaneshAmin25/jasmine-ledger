@@ -8,6 +8,7 @@ interface NewsItem {
   link: string;
   pubDate: string;
   source: string;
+  image: string;
 }
 
 function extractXmlValue(xml: string, tag: string): string {
@@ -19,6 +20,19 @@ function extractXmlValue(xml: string, tag: string): string {
 function extractSource(itemXml: string): string {
   const sourceMatch = itemXml.match(/<source[^>]*>(?:<!\[CDATA\[)?(.+?)(?:\]\]>)?<\/source>/);
   return sourceMatch?.[1]?.trim() || 'Google News';
+}
+
+function extractImage(itemXml: string): string {
+  // Try media:content
+  const mediaMatch = itemXml.match(/<media:content[^>]+url="([^"]+)"/);
+  if (mediaMatch?.[1]) return mediaMatch[1];
+  // Try enclosure
+  const enclosureMatch = itemXml.match(/<enclosure[^>]+url="([^"]+)"/);
+  if (enclosureMatch?.[1]) return enclosureMatch[1];
+  // Try media:thumbnail
+  const thumbMatch = itemXml.match(/<media:thumbnail[^>]+url="([^"]+)"/);
+  if (thumbMatch?.[1]) return thumbMatch[1];
+  return '';
 }
 
 Deno.serve(async (req) => {
@@ -53,9 +67,10 @@ Deno.serve(async (req) => {
           const link = extractXmlValue(itemXml, 'link');
           const pubDate = extractXmlValue(itemXml, 'pubDate');
           const source = extractSource(itemXml);
+          const image = extractImage(itemXml);
           
           if (title && link) {
-            allItems.push({ title, link, pubDate, source });
+            allItems.push({ title, link, pubDate, source, image });
           }
         }
       } catch (e) {

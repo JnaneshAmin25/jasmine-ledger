@@ -12,6 +12,7 @@ interface NewsArticle {
   link: string;
   pubDate: string;
   source: string;
+  image: string;
 }
 
 export const JasmineNewsSlider = () => {
@@ -103,10 +104,21 @@ export const JasmineNewsSlider = () => {
                   href={article.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block h-full p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors group"
+                  className="block h-full rounded-lg border bg-background hover:bg-muted/50 transition-colors group overflow-hidden"
                 >
-                  <div className="flex flex-col justify-between h-full gap-2">
-                    <h4 className="text-sm font-medium leading-snug line-clamp-3 group-hover:text-primary transition-colors">
+                  {article.image && (
+                    <div className="w-full h-28 overflow-hidden">
+                      <img
+                        src={article.image}
+                        alt={article.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                  <div className="p-3 flex flex-col justify-between gap-2" style={{ minHeight: article.image ? 'auto' : '100%' }}>
+                    <h4 className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors">
                       {article.title}
                     </h4>
                     <div className="flex items-center justify-between gap-2 mt-auto">
