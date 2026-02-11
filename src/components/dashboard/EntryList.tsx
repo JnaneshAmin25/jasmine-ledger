@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMalligeData } from '@/hooks/useMalligeData';
+import { Switch } from '@/components/ui/switch';
 import { DailyEntry } from '@/types/mallige';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,11 +12,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { format, parseISO, subMonths } from 'date-fns';
-import { Trash2, Package, IndianRupee, Clock, Calendar, CalendarOff, FileText } from 'lucide-react';
+import { Trash2, Package, IndianRupee, Clock, Calendar, CalendarOff, FileText, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export const EntryList = () => {
-  const { entries, deleteEntry, getEntriesForMonth } = useMalligeData();
+  const { entries, deleteEntry, updatePaymentStatus, getEntriesForMonth } = useMalligeData();
   const { toast } = useToast();
   
   const monthOptions = Array.from({ length: 6 }, (_, i) => {
@@ -76,7 +77,10 @@ export const EntryList = () => {
         ) : (
           <div className="space-y-1.5">
             {sortedEntries.map((entry, index) => (
-              <EntryCard key={entry.id} entry={entry} onDelete={handleDelete} isFirst={index === 0} />
+              <EntryCard key={entry.id} entry={entry} onDelete={handleDelete} onTogglePayment={async (id, val) => {
+                const success = await updatePaymentStatus(id, val);
+                if (success) toast({ title: val ? 'Payment Received ✓' : 'Payment Unmarked' });
+              }} isFirst={index === 0} />
             ))}
           </div>
         )}
@@ -88,10 +92,11 @@ export const EntryList = () => {
 interface EntryCardProps {
   entry: DailyEntry;
   onDelete: (id: string) => void;
+  onTogglePayment: (id: string, value: boolean) => void;
   isFirst?: boolean;
 }
 
-const EntryCard = ({ entry, onDelete, isFirst }: EntryCardProps) => {
+const EntryCard = ({ entry, onDelete, onTogglePayment, isFirst }: EntryCardProps) => {
   const isNoMallige = entry.noMalligeToday;
 
   return (
@@ -139,6 +144,20 @@ const EntryCard = ({ entry, onDelete, isFirst }: EntryCardProps) => {
       </div>
       
       <div className="flex items-center gap-2">
+        {/* Payment toggle */}
+        {!isNoMallige && (
+          <div className="flex flex-col items-center gap-0.5">
+            <Switch
+              checked={entry.paymentReceived}
+              onCheckedChange={(val) => onTogglePayment(entry.id, val)}
+              className="scale-75"
+            />
+            <span className={`text-[9px] ${entry.paymentReceived ? 'text-success font-medium' : 'text-muted-foreground'}`}>
+              {entry.paymentReceived ? 'Paid' : 'Unpaid'}
+            </span>
+          </div>
+        )}
+
         <div className="text-right">
           {isNoMallige ? (
             <span className="text-muted-foreground text-sm">₹0</span>

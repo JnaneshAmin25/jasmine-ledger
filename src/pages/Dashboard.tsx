@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 const Dashboard = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const navigate = useNavigate();
-  const { todayRate, getWeeklyEarnings, getPendingEntriesCount, loading: dataLoading, syncing } = useMalligeData();
+  const { todayRate, getPendingEntriesCount, loading: dataLoading, syncing } = useMalligeData();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -37,7 +37,6 @@ const Dashboard = () => {
 
   if (!isAuthenticated) return null;
 
-  const weeklyEarnings = getWeeklyEarnings();
   const pendingCount = getPendingEntriesCount();
 
   return (
@@ -84,7 +83,7 @@ const Dashboard = () => {
 
         {/* Weekly Earnings Chart */}
         <section className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <WeeklyChart data={weeklyEarnings} />
+          <WeeklyChart />
         </section>
 
         {/* Entry List */}

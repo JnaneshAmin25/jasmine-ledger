@@ -3,7 +3,7 @@ import { DailyEntry, MarketRate, WeeklyEarning, MonthlyStats } from '@/types/mal
 import { cacheService } from '@/lib/cache';
 import { useAuth } from './useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { format, subDays } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval } from 'date-fns';
 
 const CACHE_KEY = 'mallige_data';
 
@@ -61,6 +61,7 @@ export const useMalligeData = () => {
         rateStatus: row.rate_status as 'pending' | 'confirmed',
         noMalligeToday: row.no_mallige_today,
         notes: row.notes,
+        paymentReceived: (row as any).payment_received ?? false,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }));
@@ -127,6 +128,7 @@ export const useMalligeData = () => {
               rateStatus: row.rate_status as 'pending' | 'confirmed',
               noMalligeToday: row.no_mallige_today,
               notes: row.notes,
+              paymentReceived: row.payment_received ?? false,
               createdAt: row.created_at,
               updatedAt: row.updated_at,
             };
@@ -147,6 +149,7 @@ export const useMalligeData = () => {
                   rateStatus: row.rate_status as 'pending' | 'confirmed',
                   noMalligeToday: row.no_mallige_today,
                   notes: row.notes,
+                  paymentReceived: row.payment_received ?? false,
                   updatedAt: row.updated_at,
                 };
               }
@@ -232,7 +235,7 @@ export const useMalligeData = () => {
   }, [user?.id]);
 
   // Add new entry
-  const addEntry = useCallback(async (entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte'>) => {
+  const addEntry = useCallback(async (entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte' | 'paymentReceived'>) => {
     if (!user?.id) return null;
 
     const quantityAtte = entry.quantityChendu / 4;
@@ -269,6 +272,7 @@ export const useMalligeData = () => {
       rateStatus: data.rate_status as 'pending' | 'confirmed',
       noMalligeToday: data.no_mallige_today,
       notes: data.notes,
+      paymentReceived: false,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -317,6 +321,7 @@ export const useMalligeData = () => {
       rateStatus: 'confirmed',
       noMalligeToday: true,
       notes: data.notes,
+      paymentReceived: false,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -413,6 +418,25 @@ export const useMalligeData = () => {
     return newRate;
   }, [user?.id, rates, entries, today, updateCache]);
 
+  // Update payment status
+  const updatePaymentStatus = useCallback(async (id: string, paymentReceived: boolean) => {
+    if (!user?.id) return false;
+
+    const { error } = await supabase.from('mallige_entries')
+      .update({ payment_received: paymentReceived } as any)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Failed to update payment status:', error);
+      return false;
+    }
+
+    const updatedEntries = entries.map(e => e.id === id ? { ...e, paymentReceived } : e);
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
+    return true;
+  }, [user?.id, entries, rates, updateCache]);
+
   // Delete entry
   const deleteEntry = useCallback(async (id: string) => {
     if (!user?.id) return false;
@@ -436,18 +460,19 @@ export const useMalligeData = () => {
     return entries.filter(e => e.date.startsWith(yearMonth));
   }, [entries]);
 
-  // Get weekly earnings (last 7 days)
-  const getWeeklyEarnings = useCallback((): WeeklyEarning[] => {
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const date = subDays(new Date(), 6 - i);
-      return format(date, 'yyyy-MM-dd');
-    });
+  // Get weekly earnings for a specific week (Sun-Sat)
+  const getWeeklyEarnings = useCallback((weekOffset: number = 0): WeeklyEarning[] => {
+    const referenceDate = weekOffset === 0 ? new Date() : addWeeks(new Date(), weekOffset);
+    const weekStart = startOfWeek(referenceDate, { weekStartsOn: 0 }); // Sunday
+    const weekEnd = endOfWeek(referenceDate, { weekStartsOn: 0 }); // Saturday
+    const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-    return last7Days.map(date => {
-      const dayEntries = entries.filter(e => e.date === date && !e.noMalligeToday);
+    return days.map(day => {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      const dayEntries = entries.filter(e => e.date === dateStr && !e.noMalligeToday);
       const amount = dayEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
       const quantity = dayEntries.reduce((sum, e) => sum + e.quantityAtte, 0);
-      return { date, amount, quantity };
+      return { date: dateStr, amount, quantity };
     });
   }, [entries]);
 
@@ -511,6 +536,7 @@ export const useMalligeData = () => {
     addNoMalligeEntry,
     setRate,
     deleteEntry,
+    updatePaymentStatus,
     getEntriesForMonth,
     getWeeklyEarnings,
     getMonthlyStats,

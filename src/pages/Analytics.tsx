@@ -181,12 +181,13 @@ const Analytics = () => {
       const rate = e.ratePerAtte ? `₹${e.ratePerAtte}` : 'Pending';
       const qty = `${e.quantityAtte} atte`;
       const price = e.totalAmount ? `₹${e.totalAmount.toLocaleString('en-IN')}` : '-';
-      return `${date} | ${rate} | ${qty} | ${price}`;
+      const paid = e.paymentReceived ? '✅' : '⏳';
+      return `${date} | ${rate} | ${qty} | ${price} | ${paid}`;
     });
 
     const totalPrice = filteredEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
-    const header = `🌸 *Shankarpura Mallige*\n📅 ${format(exportDateRange.from!, 'dd MMM yyyy')} - ${format(exportDateRange.to!, 'dd MMM yyyy')}\n\n*Date | Rate | Qty | Price*`;
+    const header = `🌸 *Shankarpura Mallige*\n📅 ${format(exportDateRange.from!, 'dd MMM yyyy')} - ${format(exportDateRange.to!, 'dd MMM yyyy')}\n\n*Date | Rate | Qty | Price | Paid*`;
     const divider = `\n———————————————\n💰 *Total: ₹${totalPrice.toLocaleString('en-IN')}*`;
 
     const message = `${header}\n${lines.join('\n')}${divider}`;
