@@ -10,7 +10,8 @@ import { AddEntryDialog } from '@/components/dashboard/AddEntryDialog';
 import { SetRateDialog } from '@/components/dashboard/SetRateDialog';
 import { NoMalligeDialog } from '@/components/dashboard/NoMalligeDialog';
 import { RateCalculatorDialog } from '@/components/dashboard/RateCalculatorDialog';
-import { Loader2, Plus, TrendingUp, CalendarX, Calculator } from 'lucide-react';
+import { Loader2, ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const Dashboard = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
@@ -43,7 +44,7 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container py-6 md:py-8 space-y-6 md:space-y-8">
+      <main className="container py-4 md:py-6 space-y-4 md:space-y-6">
         {/* Syncing indicator */}
         {syncing && (
           <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-full bg-card shadow-lg border animate-fade-in">
@@ -52,18 +53,32 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Rate Display Section */}
+        {/* Rate Display Section - no card wrapper on mobile */}
         <section className="animate-fade-in">
           <RateDisplay rate={todayRate} pendingCount={pendingCount} />
         </section>
 
-        {/* Quick Actions */}
+        {/* Quick Actions - horizontal scroll on mobile */}
         <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <AddEntryDialog />
             <SetRateDialog />
             <NoMalligeDialog />
             <RateCalculatorDialog />
+            <Button
+              variant="outline"
+              className="gap-2 border-accent/30 text-accent hover:bg-accent/10 hover:border-accent/50 rounded-xl h-11 font-medium transition-all"
+              asChild
+            >
+              <a 
+                href="https://thecanarapost.com/2021/12/25/udupi-jasmine-todays-price-19/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Check Today's Rate
+              </a>
+            </Button>
           </div>
         </section>
 
