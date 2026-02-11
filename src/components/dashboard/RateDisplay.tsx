@@ -1,7 +1,9 @@
 import { MarketRate } from '@/types/mallige';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { IndianRupee, Clock, AlertCircle, Sparkles, TrendingUp } from 'lucide-react';
+import { IndianRupee, Clock, AlertCircle, Sparkles, TrendingUp, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
 import jasmineHero from '@/assets/jasmine-hero.jpg';
 
 interface RateDisplayProps {
@@ -13,6 +15,24 @@ export const RateDisplay = ({ rate, pendingCount }: RateDisplayProps) => {
   const currentHour = new Date().getHours();
   const isBeforeNoon = currentHour < 12;
   const today = format(new Date(), 'EEEE, dd MMMM yyyy');
+
+  const handleShare = async () => {
+    const rateText = rate ? `₹${rate.ratePerAtte} per atte` : 'Not set yet';
+    const shareText = `🌸 Today's Shankarpura Mallige Rate: ${rateText}\n📅 ${today}\n\nAre you a mallige grower? Track your daily earnings and manage your mallige business easily!\n👉 https://malligeratemanagement.lovable.app`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Today's Mallige Rate", text: shareText });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          toast.error('Failed to share');
+        }
+      }
+    } else {
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      window.open(whatsappUrl, '_blank');
+    }
+  };
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-card shadow-xl">
@@ -33,6 +53,15 @@ export const RateDisplay = ({ rate, pendingCount }: RateDisplayProps) => {
                     Live
                   </Badge>
                 )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full ml-auto text-muted-foreground hover:text-primary"
+                  onClick={handleShare}
+                  title="Share today's rate"
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
               
               <h2 className="font-display text-base md:text-lg font-semibold text-foreground">
