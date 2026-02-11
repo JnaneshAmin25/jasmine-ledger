@@ -186,11 +186,14 @@ const Analytics = () => {
     });
 
     const totalPrice = filteredEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+    const unpaidTotal = filteredEntries.filter(e => !e.paymentReceived).reduce((sum, e) => sum + (e.totalAmount || 0), 0);
+    const unpaidCount = filteredEntries.filter(e => !e.paymentReceived).length;
 
     const header = `🌸 *Shankarpura Mallige*\n📅 ${format(exportDateRange.from!, 'dd MMM yyyy')} - ${format(exportDateRange.to!, 'dd MMM yyyy')}\n\n*Date | Rate | Qty | Price | Paid*`;
     const divider = `\n———————————————\n💰 *Total: ₹${totalPrice.toLocaleString('en-IN')}*`;
+    const unpaidLine = unpaidCount > 0 ? `\n⚠️ *Unpaid: ₹${unpaidTotal.toLocaleString('en-IN')} (${unpaidCount} days)*` : '';
 
-    const message = `${header}\n${lines.join('\n')}${divider}`;
+    const message = `${header}\n${lines.join('\n')}${divider}${unpaidLine}`;
 
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
@@ -249,6 +252,19 @@ const Analytics = () => {
                   disabled={(date) => date > new Date()}
                   numberOfMonths={1}
                   className="p-0 pointer-events-auto"
+                  modifiers={{
+                    unpaid: entries
+                      .filter(e => !e.noMalligeToday && !e.paymentReceived)
+                      .map(e => parseISO(e.date)),
+                  }}
+                  modifiersStyles={{
+                    unpaid: {
+                      backgroundColor: 'hsl(0 72% 51% / 0.15)',
+                      color: 'hsl(0 72% 40%)',
+                      fontWeight: 600,
+                      borderRadius: '50%',
+                    },
+                  }}
                 />
                 <Button 
                   onClick={handleWhatsAppShare}
