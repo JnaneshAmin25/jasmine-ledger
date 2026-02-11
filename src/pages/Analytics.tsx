@@ -20,11 +20,11 @@ import {
 import { 
   TrendingUp, TrendingDown, IndianRupee, Package, Calendar as CalendarIcon, 
   Loader2, ArrowUpRight, ArrowDownRight, Target, Zap, Award, BarChart3, 
-  Activity, Sparkles, FileSpreadsheet
+  Activity, Sparkles, MessageCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
-import * as XLSX from 'xlsx';
+
 
 const Analytics = () => {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -167,34 +167,32 @@ const Analytics = () => {
     };
   }, [entries, rates, getMonthlyStats]);
 
-  const handleExportExcel = () => {
+  const handleWhatsAppShare = () => {
     if (!exportDateRange?.from || !exportDateRange?.to) return;
 
     const filteredEntries = entries.filter(entry => {
       const entryDate = parseISO(entry.date);
       return isWithinInterval(entryDate, { start: exportDateRange.from!, end: exportDateRange.to! });
+    }).filter(e => !e.noMalligeToday)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const lines = filteredEntries.map(e => {
+      const date = format(parseISO(e.date), 'dd-MM-yyyy');
+      const rate = e.ratePerAtte ? `₹${e.ratePerAtte}` : 'Pending';
+      const qty = `${e.quantityAtte} atte`;
+      const price = e.totalAmount ? `₹${e.totalAmount.toLocaleString('en-IN')}` : '-';
+      return `${date} | ${rate} | ${qty} | ${price}`;
     });
 
-    const exportData = filteredEntries
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(e => ({
-        'Date': format(parseISO(e.date), 'dd-MM-yyyy'),
-        'Day': format(parseISO(e.date), 'EEEE'),
-        'Quantity (Chendu)': e.quantityChendu,
-        'Quantity (Atte)': e.quantityAtte,
-        'Rate (₹/Atte)': e.ratePerAtte || '',
-        'Total Amount (₹)': e.totalAmount || '',
-        'Status': e.rateStatus,
-        'No Mallige': e.noMalligeToday ? 'Yes' : 'No',
-        'Notes': e.notes || '',
-      }));
+    const totalPrice = filteredEntries.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Mallige Data');
-    
-    const fileName = `mallige_data_${format(exportDateRange.from!, 'dd-MMM-yyyy')}_to_${format(exportDateRange.to!, 'dd-MMM-yyyy')}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    const header = `🌸 *Shankarpura Mallige*\n📅 ${format(exportDateRange.from!, 'dd MMM yyyy')} - ${format(exportDateRange.to!, 'dd MMM yyyy')}\n\n*Date | Rate | Qty | Price*`;
+    const divider = `\n———————————————\n💰 *Total: ₹${totalPrice.toLocaleString('en-IN')}*`;
+
+    const message = `${header}\n${lines.join('\n')}${divider}`;
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
     setExportPopoverOpen(false);
   };
 
@@ -235,14 +233,14 @@ const Analytics = () => {
           {/* Export Button */}
           <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2 rounded-xl h-10 border-primary/30 text-primary hover:bg-primary/10">
-                <FileSpreadsheet className="h-4 w-4" />
-                <span className="hidden sm:inline">Export Excel</span>
+              <Button variant="outline" className="gap-2 rounded-xl h-10 border-green-600/30 text-green-700 hover:bg-green-50">
+                <MessageCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">WhatsApp</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-4 rounded-xl" align="end">
               <div className="space-y-3">
-                <p className="text-sm font-medium">Select date range to export</p>
+                <p className="text-sm font-medium">Select date range to share</p>
                 <Calendar
                   mode="range"
                   selected={exportDateRange}
@@ -252,12 +250,12 @@ const Analytics = () => {
                   className="p-0 pointer-events-auto"
                 />
                 <Button 
-                  onClick={handleExportExcel}
+                  onClick={handleWhatsAppShare}
                   disabled={!exportDateRange?.from || !exportDateRange?.to}
-                  className="w-full gradient-primary text-primary-foreground rounded-xl gap-2"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2"
                 >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Download Excel
+                  <MessageCircle className="h-4 w-4" />
+                  Send via WhatsApp
                 </Button>
               </div>
             </PopoverContent>
