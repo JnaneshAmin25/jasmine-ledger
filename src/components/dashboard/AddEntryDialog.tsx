@@ -30,6 +30,7 @@ export const AddEntryDialog = () => {
   
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [quantityChendu, setQuantityChendu] = useState('');
@@ -40,6 +41,13 @@ export const AddEntryDialog = () => {
   const rateForDate = getRateForDate(dateStr);
   const quantityAtte = quantityChendu ? parseFloat(quantityChendu) / 4 : 0;
   const estimatedAmount = rateForDate ? quantityAtte * rateForDate.ratePerAtte : null;
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(date);
+      setDatePickerOpen(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,13 +63,12 @@ export const AddEntryDialog = () => {
 
       if (entry) {
         toast({
-          title: 'Entry Added',
+          title: 'Entry Added ✓',
           description: entry.rateStatus === 'pending' 
             ? `Entry for ${format(selectedDate, 'dd MMM')} saved. Amount will be calculated when rate is set.`
             : `₹${entry.totalAmount?.toLocaleString()} earned on ${format(selectedDate, 'dd MMM')}!`,
         });
         
-        // Reset form
         setQuantityChendu('');
         setFlowerShopName('');
         setNotes('');
@@ -82,40 +89,41 @@ export const AddEntryDialog = () => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gradient-primary text-primary-foreground font-semibold shadow-lg hover:shadow-xl hover:shadow-primary/25 transition-all gap-2 rounded-xl h-11 px-5">
-          <Plus className="h-4 w-4" />
+        <Button className="gradient-primary text-primary-foreground font-semibold shadow-lg hover:shadow-xl hover:shadow-primary/25 transition-all gap-2 rounded-xl h-12 px-6 text-base">
+          <Plus className="h-5 w-5" />
           Add Entry
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[440px] rounded-2xl p-0 overflow-hidden">
-        <div className="gradient-primary p-4">
+        <div className="gradient-primary p-5">
           <DialogHeader className="text-primary-foreground">
             <DialogTitle className="font-display text-xl flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
               Add Entry
             </DialogTitle>
-            <DialogDescription className="text-primary-foreground/80">
-              Record your mallige delivery for any date
+            <DialogDescription className="text-primary-foreground/80 text-base">
+              Record your mallige delivery
             </DialogDescription>
           </DialogHeader>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Date Picker */}
           <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            <Label className="flex items-center gap-2 text-base font-medium">
+              <CalendarIcon className="h-5 w-5 text-muted-foreground" />
               Date
             </Label>
-            <Popover>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-full justify-start text-left font-normal h-11 rounded-xl",
+                    "w-full justify-start text-left font-normal h-12 rounded-xl text-base",
                     !selectedDate && "text-muted-foreground"
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  <CalendarIcon className="mr-2 h-5 w-5" />
                   {format(selectedDate, 'PPP')}
                 </Button>
               </PopoverTrigger>
@@ -123,7 +131,7 @@ export const AddEntryDialog = () => {
                 <Calendar
                   mode="single"
                   selected={selectedDate}
-                  onSelect={(date) => date && setSelectedDate(date)}
+                  onSelect={handleDateSelect}
                   disabled={(date) => date > new Date()}
                   initialFocus
                   className={cn("p-3 pointer-events-auto")}
@@ -131,54 +139,57 @@ export const AddEntryDialog = () => {
               </PopoverContent>
             </Popover>
             {rateForDate ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success/10 border border-success/20">
-                <Check className="h-4 w-4 text-success" />
-                <span className="text-sm text-success font-medium">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-success/10 border border-success/20">
+                <Check className="h-5 w-5 text-success" />
+                <span className="text-base text-success font-medium">
                   Rate: ₹{rateForDate.ratePerAtte}/atte
                 </span>
               </div>
             ) : (
-              <p className="text-sm text-warning flex items-center gap-1.5 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20">
-                <CalendarIcon className="h-4 w-4" />
+              <p className="text-base text-warning flex items-center gap-2 px-3 py-2.5 rounded-lg bg-warning/10 border border-warning/20">
+                <CalendarIcon className="h-5 w-5" />
                 No rate set for this date yet
               </p>
             )}
           </div>
 
+          {/* Quantity */}
           <div className="space-y-2">
-            <Label htmlFor="quantity" className="flex items-center gap-2 text-sm font-medium">
-              <Package className="h-4 w-4 text-muted-foreground" />
-              Quantity (in Chendu)
+            <Label htmlFor="quantity" className="flex items-center gap-2 text-base font-medium">
+              <Package className="h-5 w-5 text-muted-foreground" />
+              Quantity (Chendu)
             </Label>
             <Input
               id="quantity"
               type="number"
+              inputMode="decimal"
               step="0.5"
               min="0"
               placeholder="e.g., 8"
               value={quantityChendu}
               onChange={(e) => setQuantityChendu(e.target.value)}
-              className="h-11 rounded-xl"
+              className="h-12 rounded-xl text-lg"
               required
             />
             {quantityChendu && (
-              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/50">
-                <span className="text-sm text-muted-foreground">
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/50">
+                <span className="text-base text-muted-foreground">
                   = {quantityAtte.toFixed(2)} atte
                 </span>
                 {estimatedAmount !== null && (
-                  <span className="text-sm text-success font-semibold">
-                    ₹{estimatedAmount.toLocaleString()} estimated
+                  <span className="text-base text-success font-semibold">
+                    ₹{estimatedAmount.toLocaleString()}
                   </span>
                 )}
               </div>
             )}
           </div>
 
+          {/* Flower Shop */}
           <div className="space-y-2">
-            <Label htmlFor="shop" className="flex items-center gap-2 text-sm font-medium">
-              <Store className="h-4 w-4 text-muted-foreground" />
-              Flower Shop Name <span className="text-muted-foreground font-normal">(Optional)</span>
+            <Label htmlFor="shop" className="flex items-center gap-2 text-base font-medium">
+              <Store className="h-5 w-5 text-muted-foreground" />
+              Flower Shop <span className="text-muted-foreground font-normal text-sm">(Optional)</span>
             </Label>
             <Input
               id="shop"
@@ -186,14 +197,15 @@ export const AddEntryDialog = () => {
               placeholder="e.g., Krishna Flowers"
               value={flowerShopName}
               onChange={(e) => setFlowerShopName(e.target.value)}
-              className="h-11 rounded-xl"
+              className="h-12 rounded-xl text-base"
             />
           </div>
 
+          {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="notes" className="flex items-center gap-2 text-sm font-medium">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Notes <span className="text-muted-foreground font-normal">(Optional)</span>
+            <Label htmlFor="notes" className="flex items-center gap-2 text-base font-medium">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              Notes <span className="text-muted-foreground font-normal text-sm">(Optional)</span>
             </Label>
             <Textarea
               id="notes"
@@ -201,24 +213,24 @@ export const AddEntryDialog = () => {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="rounded-xl resize-none"
+              className="rounded-xl resize-none text-base"
             />
           </div>
 
-          <DialogFooter className="gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl">
+          <DialogFooter className="gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl h-12 text-base flex-1">
               Cancel
             </Button>
             <Button 
               type="submit" 
-              className="gradient-primary text-primary-foreground rounded-xl min-w-[120px]"
+              className="gradient-primary text-primary-foreground rounded-xl h-12 text-base flex-1 min-w-[140px]"
               disabled={loading || !quantityChendu}
             >
               {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
                 <>
-                  <Plus className="h-4 w-4 mr-1" />
+                  <Plus className="h-5 w-5 mr-1" />
                   Add Entry
                 </>
               )}

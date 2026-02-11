@@ -29,6 +29,7 @@ export const SetRateDialog = () => {
   
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [rateValue, setRateValue] = useState('');
 
@@ -36,10 +37,10 @@ export const SetRateDialog = () => {
   const existingRate = getRateForDate(dateStr);
   const pendingCount = getPendingEntriesCountForDate(dateStr);
 
-  // Update rate value when date changes and there's an existing rate
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
+      setDatePickerOpen(false);
       const rate = getRateForDate(format(date, 'yyyy-MM-dd'));
       setRateValue(rate?.ratePerAtte?.toString() || '');
     }
@@ -81,34 +82,34 @@ export const SetRateDialog = () => {
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[400px] rounded-2xl p-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-4">
+        <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-5">
           <DialogHeader>
             <DialogTitle className="font-display text-xl flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
               Set Market Rate
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-base">
               Enter the Shankarpura mallige market rate per atte
             </DialogDescription>
           </DialogHeader>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm font-medium">
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            <Label className="flex items-center gap-2 text-base font-medium">
+              <CalendarIcon className="h-5 w-5 text-muted-foreground" />
               Date
             </Label>
-            <Popover>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-full justify-start text-left font-normal h-11 rounded-xl",
+                    "w-full justify-start text-left font-normal h-12 rounded-xl text-base",
                     !selectedDate && "text-muted-foreground"
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  <CalendarIcon className="mr-2 h-5 w-5" />
                   {format(selectedDate, 'PPP')}
                 </Button>
               </PopoverTrigger>
@@ -126,21 +127,22 @@ export const SetRateDialog = () => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="rate" className="flex items-center gap-2 text-sm font-medium">
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="rate" className="flex items-center gap-2 text-base font-medium">
+              <IndianRupee className="h-5 w-5 text-muted-foreground" />
               Rate per Atte
             </Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₹</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-lg">₹</span>
               <Input
                 id="rate"
                 type="number"
+                inputMode="numeric"
                 step="1"
                 min="0"
                 placeholder="e.g., 150"
                 value={rateValue}
                 onChange={(e) => setRateValue(e.target.value)}
-                className="h-12 text-lg font-semibold pl-8 rounded-xl"
+                className="h-14 text-xl font-semibold pl-8 rounded-xl"
                 required
               />
             </div>
@@ -168,20 +170,20 @@ export const SetRateDialog = () => {
             </div>
           )}
 
-          <DialogFooter className="gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl">
+          <DialogFooter className="gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="rounded-xl h-12 text-base flex-1">
               Cancel
             </Button>
             <Button 
               type="submit" 
-              className="gradient-primary text-primary-foreground rounded-xl min-w-[120px]"
+              className="gradient-primary text-primary-foreground rounded-xl h-12 text-base flex-1 min-w-[140px]"
               disabled={loading || !rateValue}
             >
               {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
                 <>
-                  <Check className="h-4 w-4 mr-1" />
+                  <Check className="h-5 w-5 mr-1" />
                   {existingRate ? 'Update Rate' : 'Set Rate'}
                 </>
               )}
