@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import { AIChatWidget } from "./components/AIChatWidget";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/" element={<Dashboard />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         <AIChatGuard />
