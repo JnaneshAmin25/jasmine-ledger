@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DailyEntry, MarketRate, WeeklyEarning, MonthlyStats } from '@/types/mallige';
-import { cacheService } from '@/lib/cache';
+import { cacheService, setEncryptionKey } from '@/lib/cache';
 import { useAuth } from './useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subDays, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval } from 'date-fns';
@@ -25,6 +25,9 @@ export const useMalligeData = () => {
   // Load from cache first, then sync with Supabase
   const loadData = useCallback(async () => {
     if (!user?.id) return;
+
+    // Set encryption key for cache based on user
+    setEncryptionKey(user.id);
 
     // Load from cache first for instant display
     const cached = cacheService.get<CachedData>(`${CACHE_KEY}_${user.id}`);
