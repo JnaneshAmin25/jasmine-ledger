@@ -34,3 +34,6 @@ enable_confirmations = false
 
 [functions.mongodb-api]
 verify_jwt = true
+
+[functions.ai-chat]
+verify_jwt = false
