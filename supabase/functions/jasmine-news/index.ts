@@ -32,6 +32,9 @@ function extractImage(itemXml: string): string {
   // Try media:thumbnail
   const thumbMatch = itemXml.match(/<media:thumbnail[^>]+url="([^"]+)"/);
   if (thumbMatch?.[1]) return thumbMatch[1];
+  // Try img tag inside description/CDATA
+  const imgMatch = itemXml.match(/<img[^>]+src="([^"]+)"/);
+  if (imgMatch?.[1]) return imgMatch[1];
   return '';
 }
 
