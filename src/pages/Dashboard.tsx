@@ -5,6 +5,7 @@ import { useMalligeData } from '@/hooks/useMalligeData';
 import { Header } from '@/components/layout/Header';
 import { RateDisplay } from '@/components/dashboard/RateDisplay';
 import { WeeklyChart } from '@/components/dashboard/WeeklyChart';
+import { JasmineNewsSlider } from '@/components/dashboard/JasmineNewsSlider';
 import { EntryList } from '@/components/dashboard/EntryList';
 import { AddEntryDialog } from '@/components/dashboard/AddEntryDialog';
 import { SetRateDialog } from '@/components/dashboard/SetRateDialog';
@@ -86,8 +87,13 @@ const Dashboard = () => {
           <WeeklyChart />
         </section>
 
-        {/* Entry List */}
+        {/* Jasmine News */}
         <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+          <JasmineNewsSlider />
+        </section>
+
+        {/* Entry List */}
+        <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
           <EntryList />
         </section>
       </main>
