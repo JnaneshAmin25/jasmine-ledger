@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import Autoplay from 'embla-carousel-autoplay';
+import jasmineHero from '@/assets/jasmine-hero.jpg';
 
 interface NewsArticle {
   title: string;
@@ -106,18 +107,16 @@ export const JasmineNewsSlider = () => {
                   rel="noopener noreferrer"
                   className="block h-full rounded-lg border bg-background hover:bg-muted/50 transition-colors group overflow-hidden"
                 >
-                  {article.image && (
-                    <div className="w-full h-28 overflow-hidden">
-                      <img
-                        src={article.image}
-                        alt={article.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    </div>
-                  )}
-                  <div className="p-3 flex flex-col justify-between gap-2" style={{ minHeight: article.image ? 'auto' : '100%' }}>
+                  <div className="w-full h-28 overflow-hidden">
+                    <img
+                      src={article.image || jasmineHero}
+                      alt={article.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).src = jasmineHero; }}
+                    />
+                  </div>
+                  <div className="p-3 flex flex-col justify-between gap-2">
                     <h4 className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors">
                       {article.title}
                     </h4>
