@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 const Dashboard = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const navigate = useNavigate();
-  const { todayRate, getPendingEntriesCount, loading: dataLoading, syncing } = useMalligeData();
+  const { todayRate, getPendingEntriesCount, loading: dataLoading, syncing, setRate } = useMalligeData();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
