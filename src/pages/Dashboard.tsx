@@ -56,7 +56,14 @@ const Dashboard = () => {
 
         {/* Rate Display Section - no card wrapper on mobile */}
         <section className="animate-fade-in">
-          <RateDisplay rate={todayRate} pendingCount={pendingCount} />
+          <RateDisplay 
+            rate={todayRate} 
+            pendingCount={pendingCount} 
+            onApplyMarketRate={(marketRate) => {
+              const todayStr = format(new Date(), 'yyyy-MM-dd');
+              setRate(todayStr, marketRate);
+            }}
+          />
         </section>
 
         {/* Quick Actions - horizontal scroll on mobile */}
