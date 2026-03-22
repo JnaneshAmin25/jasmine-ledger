@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useMalligeData } from '@/hooks/useMalligeData';
+import { format } from 'date-fns';
 import { Header } from '@/components/layout/Header';
 import { RateDisplay } from '@/components/dashboard/RateDisplay';
 import { WeeklyChart } from '@/components/dashboard/WeeklyChart';
@@ -17,7 +18,7 @@ import { Button } from '@/components/ui/button';
 const Dashboard = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const navigate = useNavigate();
-  const { todayRate, getPendingEntriesCount, loading: dataLoading, syncing } = useMalligeData();
+  const { todayRate, getPendingEntriesCount, loading: dataLoading, syncing, setRate } = useMalligeData();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -55,7 +56,14 @@ const Dashboard = () => {
 
         {/* Rate Display Section - no card wrapper on mobile */}
         <section className="animate-fade-in">
-          <RateDisplay rate={todayRate} pendingCount={pendingCount} />
+          <RateDisplay 
+            rate={todayRate} 
+            pendingCount={pendingCount} 
+            onApplyMarketRate={(marketRate) => {
+              const todayStr = format(new Date(), 'yyyy-MM-dd');
+              setRate(todayStr, marketRate);
+            }}
+          />
         </section>
 
         {/* Quick Actions - horizontal scroll on mobile */}

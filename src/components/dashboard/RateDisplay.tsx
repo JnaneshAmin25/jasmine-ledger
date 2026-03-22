@@ -1,23 +1,60 @@
+import { useState, useEffect } from 'react';
 import { MarketRate } from '@/types/mallige';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
-import { IndianRupee, Clock, AlertCircle, Sparkles, TrendingUp, Share2 } from 'lucide-react';
+import { IndianRupee, Clock, AlertCircle, Sparkles, TrendingUp, Share2, Globe, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import jasmineHero from '@/assets/jasmine-hero.jpg';
 
 interface RateDisplayProps {
   rate: MarketRate | null;
   pendingCount: number;
+  onApplyMarketRate?: (rate: number) => void;
 }
 
-export const RateDisplay = ({ rate, pendingCount }: RateDisplayProps) => {
+interface ScrapedRate {
+  todayRate: number;
+  dateLabel: string;
+  source: string;
+  scrapedAt: string;
+}
+
+export const RateDisplay = ({ rate, pendingCount, onApplyMarketRate }: RateDisplayProps) => {
   const currentHour = new Date().getHours();
   const isBeforeNoon = currentHour < 12;
   const today = format(new Date(), 'EEEE, dd MMMM yyyy');
+  const [marketRate, setMarketRate] = useState<ScrapedRate | null>(null);
+  const [fetchingMarket, setFetchingMarket] = useState(false);
+
+  useEffect(() => {
+    fetchMarketRate();
+  }, []);
+
+  const fetchMarketRate = async () => {
+    setFetchingMarket(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-rate');
+      if (error) throw error;
+      if (data?.success) {
+        setMarketRate({
+          todayRate: data.todayRate,
+          dateLabel: data.dateLabel,
+          source: data.source,
+          scrapedAt: data.scrapedAt,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch market rate:', e);
+    } finally {
+      setFetchingMarket(false);
+    }
+  };
 
   const handleShare = async () => {
-    const rateText = rate ? `₹${rate.ratePerAtte} per atte` : 'Not set yet';
+    const displayRate = rate?.ratePerAtte || marketRate?.todayRate;
+    const rateText = displayRate ? `₹${displayRate} per atte` : 'Not set yet';
     const shareText = `🌸 Today's Shankarpura Mallige Rate: ${rateText}\n📅 ${today}\n\nAre you a mallige grower? Track your daily earnings and manage your mallige business easily!\n👉 https://malligeratemanagement.lovable.app`;
 
     if (navigator.share) {
@@ -34,6 +71,13 @@ export const RateDisplay = ({ rate, pendingCount }: RateDisplayProps) => {
     }
   };
 
+  const handleApplyMarketRate = () => {
+    if (marketRate && onApplyMarketRate) {
+      onApplyMarketRate(marketRate.todayRate);
+      toast.success(`Market rate ₹${marketRate.todayRate} applied!`);
+    }
+  };
+
   return (
     <div className="relative overflow-hidden rounded-2xl bg-card shadow-xl">
       {/* Jasmine background image */}
@@ -47,7 +91,7 @@ export const RateDisplay = ({ rate, pendingCount }: RateDisplayProps) => {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <p className="text-xs text-muted-foreground">{today}</p>
-                {rate && (
+                {(rate || marketRate) && (
                   <Badge variant="outline" className="gap-1 bg-success/10 text-success border-success/30 animate-pulse text-xs">
                     <Sparkles className="h-3 w-3" />
                     Live
@@ -77,21 +121,60 @@ export const RateDisplay = ({ rate, pendingCount }: RateDisplayProps) => {
                     <span className="text-base text-muted-foreground font-medium">per atte</span>
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                       <TrendingUp className="h-3 w-3" />
-                      Market rate
+                      Your set rate
                     </span>
                   </div>
+                </div>
+              ) : marketRate ? (
+                <div className="space-y-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl md:text-6xl font-display font-bold text-gradient tracking-tight">
+                      ₹{marketRate.todayRate}
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-base text-muted-foreground font-medium">per atte</span>
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Globe className="h-3 w-3" />
+                        {marketRate.source} • {marketRate.dateLabel}
+                      </span>
+                    </div>
+                  </div>
+                  {onApplyMarketRate && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs h-8 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={handleApplyMarketRate}
+                    >
+                      <TrendingUp className="h-3 w-3" />
+                      Use this as today's rate
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="text-2xl md:text-4xl font-display font-bold text-muted-foreground/50">
-                    {isBeforeNoon ? 'Awaiting Rate' : 'Not Set'}
+                    {fetchingMarket ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        Fetching...
+                      </span>
+                    ) : isBeforeNoon ? 'Awaiting Rate' : 'Not Set'}
                   </div>
-                  {isBeforeNoon && (
+                  {!fetchingMarket && isBeforeNoon && (
                     <Badge variant="secondary" className="gap-1 bg-warning/10 text-warning border-warning/20 py-1 px-2 text-xs">
                       <Clock className="h-3 w-3" />
                       Usually set after 12 PM
                     </Badge>
                   )}
+                </div>
+              )}
+
+              {/* Show market rate alongside user rate if both exist */}
+              {rate && marketRate && rate.ratePerAtte !== marketRate.todayRate && (
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <Globe className="h-3 w-3" />
+                  <span>Market rate: ₹{marketRate.todayRate} ({marketRate.source})</span>
                 </div>
               )}
             </div>
