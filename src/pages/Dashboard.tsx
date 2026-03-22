@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useMalligeData } from '@/hooks/useMalligeData';
+import { format } from 'date-fns';
 import { Header } from '@/components/layout/Header';
 import { RateDisplay } from '@/components/dashboard/RateDisplay';
 import { WeeklyChart } from '@/components/dashboard/WeeklyChart';
