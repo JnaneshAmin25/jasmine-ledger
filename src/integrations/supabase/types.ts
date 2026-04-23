@@ -14,7 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      mallige_entries: {
+        Row: {
+          created_at: string
+          date: string
+          earnings: number | null
+          id: string
+          no_mallige_today: boolean
+          notes: string | null
+          payment_received: boolean
+          quantity: number
+          rate_per_atte: number | null
+          rate_status: string
+          unit: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          earnings?: number | null
+          id?: string
+          no_mallige_today?: boolean
+          notes?: string | null
+          payment_received?: boolean
+          quantity: number
+          rate_per_atte?: number | null
+          rate_status?: string
+          unit?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          earnings?: number | null
+          id?: string
+          no_mallige_today?: boolean
+          notes?: string | null
+          payment_received?: boolean
+          quantity?: number
+          rate_per_atte?: number | null
+          rate_status?: string
+          unit?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mallige_rates: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          rate_per_atte: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          rate_per_atte: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          rate_per_atte?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

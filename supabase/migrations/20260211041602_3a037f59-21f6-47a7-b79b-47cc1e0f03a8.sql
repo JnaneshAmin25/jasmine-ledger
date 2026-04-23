@@ -1,0 +1,1 @@
+ALTER TABLE public.mallige_entries ADD COLUMN payment_received boolean NOT NULL DEFAULT false;

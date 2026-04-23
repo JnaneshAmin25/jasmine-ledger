@@ -34,3 +34,12 @@ enable_confirmations = false
 
 [functions.mongodb-api]
 verify_jwt = true
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.notify-new-user]
+verify_jwt = false
+
+[functions.jasmine-news]
+verify_jwt = false

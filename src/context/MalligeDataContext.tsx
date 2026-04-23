@@ -1,27 +1,19 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { DailyEntry, MarketRate, WeeklyEarning, MonthlyStats } from '@/types/mallige';
+import { cacheService, setEncryptionKey } from '@/lib/cache';
 import { useAuth } from '@/hooks/useAuth';
-import { format, subDays } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { format, startOfWeek, endOfWeek, addWeeks, eachDayOfInterval } from 'date-fns';
 
-const STORAGE_KEY = 'mallige_data';
+const CACHE_KEY = 'mallige_data';
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000;
 const CANARA_POST_URL = 'https://thecanarapost.com/2021/12/25/udupi-jasmine-todays-price-19/';
 const CORS_PROXY = 'https://api.allorigins.win/get?url=';
 
-interface StoredData {
+interface CachedData {
   entries: DailyEntry[];
   rates: MarketRate[];
 }
-
-const getStoredData = (userId: string): StoredData => {
-  const data = localStorage.getItem(`${STORAGE_KEY}_${userId}`);
-  if (data) return JSON.parse(data);
-  return { entries: [], rates: [] };
-};
-
-const saveStoredData = (userId: string, data: StoredData) => {
-  localStorage.setItem(`${STORAGE_KEY}_${userId}`, JSON.stringify(data));
-};
 
 function getTodayPatterns(): RegExp[] {
   const monthNames = [
@@ -61,134 +53,307 @@ export interface MalligeDataContextValue {
   entries: DailyEntry[];
   rates: MarketRate[];
   loading: boolean;
+  syncing: boolean;
   todayRate: MarketRate | null;
   autoFetchStatus: 'idle' | 'fetching' | 'done' | 'error';
   lastAutoFetch: Date | null;
-  addEntry: (entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte'>) => Promise<DailyEntry | null>;
+  addEntry: (entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte' | 'paymentReceived'>) => Promise<DailyEntry | null>;
+  addNoMalligeEntry: (date: string, notes?: string) => Promise<DailyEntry | null>;
   setRate: (date: string, ratePerAtte: number, source?: 'auto' | 'manual') => Promise<MarketRate | null>;
   deleteEntry: (id: string) => Promise<boolean>;
+  updatePaymentStatus: (id: string, paymentReceived: boolean) => Promise<boolean>;
   getEntriesForMonth: (yearMonth: string) => DailyEntry[];
-  getWeeklyEarnings: () => WeeklyEarning[];
+  getWeeklyEarnings: (weekOffset?: number) => WeeklyEarning[];
   getMonthlyStats: (yearMonth: string) => MonthlyStats;
   getTodayEntries: () => DailyEntry[];
   getPendingEntriesCount: () => number;
+  getPendingEntriesCountForDate: (date: string) => number;
+  getRateForDate: (date: string) => MarketRate | null;
+  hasEntryForDate: (date: string) => boolean;
+  refresh: () => void;
   fetchRateFromWebsite: () => Promise<void>;
 }
 
 const MalligeDataContext = createContext<MalligeDataContextValue | null>(null);
 
 export const MalligeDataProvider = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [rates, setRates] = useState<MarketRate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [todayRate, setTodayRate] = useState<MarketRate | null>(null);
   const [autoFetchStatus, setAutoFetchStatus] = useState<'idle' | 'fetching' | 'done' | 'error'>('idle');
   const [lastAutoFetch, setLastAutoFetch] = useState<Date | null>(null);
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
-  useEffect(() => {
-    if (user?.id) {
-      const data = getStoredData(user.id);
-      setEntries(data.entries);
-      setRates(data.rates);
-      setTodayRate(data.rates.find(r => r.date === today) ?? null);
-      setLoading(false);
+  // ── Data loading ─────────────────────────────────────────────────────────
+
+  const loadData = useCallback(async () => {
+    if (!user?.id) return;
+
+    setEncryptionKey(user.id);
+
+    // Show cached data instantly while syncing
+    const cached = cacheService.get<CachedData>(`${CACHE_KEY}_${user.id}`);
+    if (cached) {
+      setEntries(cached.entries);
+      setRates(cached.rates);
+      setTodayRate(cached.rates.find(r => r.date === today) ?? null);
+    }
+    setLoading(false);
+
+    try {
+      setSyncing(true);
+      const [entriesResult, ratesResult] = await Promise.all([
+        supabase.from('mallige_entries').select('*').eq('user_id', user.id),
+        supabase.from('mallige_rates').select('*').eq('user_id', user.id),
+      ]);
+      if (entriesResult.error) throw entriesResult.error;
+      if (ratesResult.error) throw ratesResult.error;
+
+      const backendEntries: DailyEntry[] = (entriesResult.data ?? []).map(row => ({
+        id: row.id,
+        userId: row.user_id,
+        date: row.date,
+        quantityChendu: row.quantity,
+        quantityAtte: row.quantity / 4,
+        ratePerAtte: row.rate_per_atte,
+        totalAmount: row.earnings,
+        rateStatus: row.rate_status as 'pending' | 'confirmed',
+        noMalligeToday: row.no_mallige_today,
+        notes: row.notes,
+        paymentReceived: (row as any).payment_received ?? false,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+
+      const backendRates: MarketRate[] = (ratesResult.data ?? []).map(row => ({
+        id: row.id,
+        date: row.date,
+        ratePerAtte: row.rate_per_atte,
+        enteredBy: row.user_id,
+        createdAt: row.created_at,
+      }));
+
+      setEntries(backendEntries);
+      setRates(backendRates);
+      setTodayRate(backendRates.find(r => r.date === today) ?? null);
+      cacheService.set(`${CACHE_KEY}_${user.id}`, { entries: backendEntries, rates: backendRates });
+    } catch (err) {
+      console.error('Failed to sync with backend:', err);
+    } finally {
+      setSyncing(false);
     }
   }, [user?.id, today]);
 
+  useEffect(() => {
+    if (user?.id && session) loadData();
+  }, [user?.id, session, loadData]);
+
+  // ── Supabase Realtime ─────────────────────────────────────────────────────
+  // Keeps all components in sync instantly without page refresh
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const entriesChannel = supabase
+      .channel('mallige-entries-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mallige_entries', filter: `user_id=eq.${user.id}` }, payload => {
+        const currentToday = format(new Date(), 'yyyy-MM-dd');
+        if (payload.eventType === 'INSERT') {
+          const row = payload.new as any;
+          const newEntry: DailyEntry = {
+            id: row.id, userId: row.user_id, date: row.date,
+            quantityChendu: row.quantity, quantityAtte: row.quantity / 4,
+            ratePerAtte: row.rate_per_atte, totalAmount: row.earnings,
+            rateStatus: row.rate_status as 'pending' | 'confirmed',
+            noMalligeToday: row.no_mallige_today, notes: row.notes,
+            paymentReceived: row.payment_received ?? false,
+            createdAt: row.created_at, updatedAt: row.updated_at,
+          };
+          setEntries(prev => prev.some(e => e.id === newEntry.id) ? prev : [...prev, newEntry]);
+        } else if (payload.eventType === 'UPDATE') {
+          const row = payload.new as any;
+          setEntries(prev => prev.map(e => e.id !== row.id ? e : {
+            ...e, quantityChendu: row.quantity, quantityAtte: row.quantity / 4,
+            ratePerAtte: row.rate_per_atte, totalAmount: row.earnings,
+            rateStatus: row.rate_status as 'pending' | 'confirmed',
+            noMalligeToday: row.no_mallige_today, notes: row.notes,
+            paymentReceived: row.payment_received ?? false, updatedAt: row.updated_at,
+          }));
+        } else if (payload.eventType === 'DELETE') {
+          setEntries(prev => prev.filter(e => e.id !== (payload.old as any).id));
+        }
+        void currentToday; // used above via closure
+      })
+      .subscribe();
+
+    const ratesChannel = supabase
+      .channel('mallige-rates-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mallige_rates', filter: `user_id=eq.${user.id}` }, payload => {
+        const currentToday = format(new Date(), 'yyyy-MM-dd');
+        if (payload.eventType === 'INSERT') {
+          const row = payload.new as any;
+          const newRate: MarketRate = { id: row.id, date: row.date, ratePerAtte: row.rate_per_atte, enteredBy: row.user_id, createdAt: row.created_at };
+          setRates(prev => prev.some(r => r.id === newRate.id) ? prev : [...prev, newRate]);
+          if (row.date === currentToday) setTodayRate(newRate);
+        } else if (payload.eventType === 'UPDATE') {
+          const row = payload.new as any;
+          const updatedRate: MarketRate = { id: row.id, date: row.date, ratePerAtte: row.rate_per_atte, enteredBy: row.user_id, createdAt: row.created_at };
+          setRates(prev => prev.map(r => r.id === row.id ? updatedRate : r));
+          if (row.date === currentToday) setTodayRate(updatedRate);
+        } else if (payload.eventType === 'DELETE') {
+          const old = payload.old as any;
+          setRates(prev => prev.filter(r => r.id !== old.id));
+          if (old.date === currentToday) setTodayRate(null);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(entriesChannel);
+      supabase.removeChannel(ratesChannel);
+    };
+  }, [user?.id]);
+
+  // ── Cache helper ──────────────────────────────────────────────────────────
+
+  const updateCache = useCallback((newEntries: DailyEntry[], newRates: MarketRate[]) => {
+    if (!user?.id) return;
+    cacheService.set(`${CACHE_KEY}_${user.id}`, { entries: newEntries, rates: newRates });
+  }, [user?.id]);
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
   const addEntry = useCallback(async (
-    entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte'>
+    entry: Omit<DailyEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'quantityAtte' | 'totalAmount' | 'rateStatus' | 'ratePerAtte' | 'paymentReceived'>
   ): Promise<DailyEntry | null> => {
     if (!user?.id) return null;
-
     const quantityAtte = entry.quantityChendu / 4;
     const rateForDate = rates.find(r => r.date === entry.date);
+
+    const { data, error } = await supabase.from('mallige_entries').insert({
+      user_id: user.id,
+      date: entry.date,
+      quantity: entry.quantityChendu,
+      unit: 'chendu',
+      rate_per_atte: rateForDate?.ratePerAtte ?? null,
+      earnings: rateForDate ? quantityAtte * rateForDate.ratePerAtte : null,
+      rate_status: rateForDate ? 'confirmed' : 'pending',
+      notes: entry.notes,
+      no_mallige_today: false,
+    }).select().single();
+
+    if (error) { console.error('Failed to save entry:', error); return null; }
+
     const newEntry: DailyEntry = {
-      id: crypto.randomUUID(),
-      userId: user.id,
-      ...entry,
-      quantityAtte,
-      ratePerAtte: rateForDate?.ratePerAtte ?? null,
-      totalAmount: rateForDate ? quantityAtte * rateForDate.ratePerAtte : null,
-      rateStatus: rateForDate ? 'confirmed' : 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      id: data.id, userId: user.id, date: data.date,
+      quantityChendu: data.quantity, quantityAtte: data.quantity / 4,
+      ratePerAtte: data.rate_per_atte, totalAmount: data.earnings,
+      rateStatus: data.rate_status as 'pending' | 'confirmed',
+      noMalligeToday: data.no_mallige_today, notes: data.notes,
+      paymentReceived: false, createdAt: data.created_at, updatedAt: data.updated_at,
     };
 
-    setEntries(prev => {
-      const updated = [...prev, newEntry];
-      const data = getStoredData(user.id);
-      data.entries = updated;
-      saveStoredData(user.id, data);
-      return updated;
-    });
-
+    const updatedEntries = [...entries, newEntry];
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
     return newEntry;
-  }, [user?.id, rates]);
+  }, [user?.id, entries, rates, updateCache]);
+
+  const addNoMalligeEntry = useCallback(async (date: string, notes?: string): Promise<DailyEntry | null> => {
+    if (!user?.id || entries.some(e => e.date === date)) return null;
+
+    const { data, error } = await supabase.from('mallige_entries').insert({
+      user_id: user.id, date, quantity: 0, unit: 'chendu',
+      rate_per_atte: null, earnings: 0, rate_status: 'confirmed',
+      notes: notes ?? 'No mallige given', no_mallige_today: true,
+    }).select().single();
+
+    if (error) { console.error('Failed to save no-mallige entry:', error); return null; }
+
+    const newEntry: DailyEntry = {
+      id: data.id, userId: user.id, date: data.date,
+      quantityChendu: 0, quantityAtte: 0, ratePerAtte: null, totalAmount: 0,
+      rateStatus: 'confirmed', noMalligeToday: true, notes: data.notes,
+      paymentReceived: false, createdAt: data.created_at, updatedAt: data.updated_at,
+    };
+
+    const updatedEntries = [...entries, newEntry];
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
+    return newEntry;
+  }, [user?.id, entries, rates, updateCache]);
 
   const setRate = useCallback(async (
     date: string, ratePerAtte: number, source: 'auto' | 'manual' = 'manual'
   ): Promise<MarketRate | null> => {
     if (!user?.id) return null;
 
+    const existingRate = rates.find(r => r.date === date);
     let newRate: MarketRate;
+    let updatedRates: MarketRate[];
 
-    setRates(prevRates => {
-      const idx = prevRates.findIndex(r => r.date === date);
-      if (idx >= 0) {
-        newRate = { ...prevRates[idx], ratePerAtte, source };
-        const updated = [...prevRates];
-        updated[idx] = newRate;
-        return updated;
-      }
-      newRate = {
-        id: crypto.randomUUID(),
-        date,
-        ratePerAtte,
-        enteredBy: user.id,
-        source,
-        createdAt: new Date().toISOString(),
-      };
-      return [...prevRates, newRate];
-    });
-
-    if (date === today) {
-      setTodayRate(prev => prev
-        ? { ...prev, ratePerAtte, source }
-        : {
-            id: crypto.randomUUID(),
-            date,
-            ratePerAtte,
-            enteredBy: user.id,
-            source,
-            createdAt: new Date().toISOString(),
-          }
-      );
+    if (existingRate) {
+      const { error } = await supabase.from('mallige_rates').update({ rate_per_atte: ratePerAtte }).eq('id', existingRate.id);
+      if (error) { console.error('Failed to update rate:', error); return null; }
+      newRate = { ...existingRate, ratePerAtte, source };
+      updatedRates = rates.map(r => r.id === existingRate.id ? newRate : r);
+    } else {
+      const { data, error } = await supabase.from('mallige_rates').insert({
+        user_id: user.id, date, rate_per_atte: ratePerAtte,
+      }).select().single();
+      if (error) { console.error('Failed to save rate:', error); return null; }
+      newRate = { id: data.id, date: data.date, ratePerAtte: data.rate_per_atte, enteredBy: user.id, createdAt: data.created_at, source };
+      updatedRates = [...rates, newRate];
     }
 
-    // Auto-calculate all pending entries for this date
-    setEntries(prevEntries => {
-      const updated = prevEntries.map(entry =>
-        entry.date === date && entry.rateStatus === 'pending'
-          ? { ...entry, ratePerAtte, totalAmount: entry.quantityAtte * ratePerAtte, rateStatus: 'confirmed' as const, updatedAt: new Date().toISOString() }
-          : entry
-      );
-      // Persist both rates and entries together
-      setRates(prevRates => {
-        const data = getStoredData(user.id);
-        data.rates = prevRates;
-        data.entries = updated;
-        saveStoredData(user.id, data);
-        return prevRates;
-      });
-      return updated;
-    });
+    setRates(updatedRates);
+    if (date === today) setTodayRate(newRate);
 
-    return newRate!;
-  }, [user?.id, today]);
+    // Auto-calculate pending entries for this date
+    const pending = entries.filter(e => e.date === date && e.rateStatus === 'pending' && !e.noMalligeToday);
+    if (pending.length > 0) {
+      await Promise.all(pending.map(e => supabase.from('mallige_entries').update({
+        rate_per_atte: ratePerAtte, earnings: e.quantityAtte * ratePerAtte, rate_status: 'confirmed',
+      }).eq('id', e.id)));
+    }
 
+    const updatedEntries = entries.map(e =>
+      e.date === date && e.rateStatus === 'pending' && !e.noMalligeToday
+        ? { ...e, ratePerAtte, totalAmount: e.quantityAtte * ratePerAtte, rateStatus: 'confirmed' as const, updatedAt: new Date().toISOString() }
+        : e
+    );
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, updatedRates);
+    return newRate;
+  }, [user?.id, rates, entries, today, updateCache]);
+
+  const deleteEntry = useCallback(async (id: string): Promise<boolean> => {
+    if (!user?.id) return false;
+    const { error } = await supabase.from('mallige_entries').delete().eq('id', id);
+    if (error) { console.error('Failed to delete entry:', error); return false; }
+    const updatedEntries = entries.filter(e => e.id !== id);
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
+    return true;
+  }, [user?.id, entries, rates, updateCache]);
+
+  const updatePaymentStatus = useCallback(async (id: string, paymentReceived: boolean): Promise<boolean> => {
+    if (!user?.id) return false;
+    const { error } = await supabase.from('mallige_entries').update({ payment_received: paymentReceived } as any).eq('id', id);
+    if (error) { console.error('Failed to update payment status:', error); return false; }
+    const updatedEntries = entries.map(e => e.id === id ? { ...e, paymentReceived } : e);
+    setEntries(updatedEntries);
+    updateCache(updatedEntries, rates);
+    return true;
+  }, [user?.id, entries, rates, updateCache]);
+
+  // ── Auto-fetch rate from The Canara Post ──────────────────────────────────
+
+  // Stable ref so polling interval always uses latest setRate without restarting
   const setRateRef = useRef(setRate);
   setRateRef.current = setRate;
 
@@ -213,7 +378,7 @@ export const MalligeDataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user?.id, today]);
 
-  // Wait until 2 PM, then check every 5 min until rate is found
+  // Wait until 2 PM then check every 5 min until rate is found
   useEffect(() => {
     if (!user?.id || loading) return;
     if (todayRate) return;
@@ -238,63 +403,66 @@ export const MalligeDataProvider = ({ children }: { children: ReactNode }) => {
     return () => { if (interval) clearInterval(interval); };
   }, [user?.id, loading, todayRate, fetchRateFromWebsite]);
 
-  const deleteEntry = useCallback(async (id: string): Promise<boolean> => {
-    if (!user?.id) return false;
-    setEntries(prev => {
-      const updated = prev.filter(e => e.id !== id);
-      const data = getStoredData(user.id);
-      data.entries = updated;
-      saveStoredData(user.id, data);
-      return updated;
-    });
-    return true;
-  }, [user?.id]);
+  // ── Queries ───────────────────────────────────────────────────────────────
 
   const getEntriesForMonth = useCallback((yearMonth: string) =>
-    entries.filter(e => e.date.startsWith(yearMonth)),
-  [entries]);
+    entries.filter(e => e.date.startsWith(yearMonth)), [entries]);
 
-  const getWeeklyEarnings = useCallback((): WeeklyEarning[] =>
-    Array.from({ length: 7 }, (_, i) => {
-      const date = format(subDays(new Date(), 6 - i), 'yyyy-MM-dd');
-      const dayEntries = entries.filter(e => e.date === date);
+  const getWeeklyEarnings = useCallback((weekOffset = 0): WeeklyEarning[] => {
+    const ref = weekOffset === 0 ? new Date() : addWeeks(new Date(), weekOffset);
+    const days = eachDayOfInterval({
+      start: startOfWeek(ref, { weekStartsOn: 0 }),
+      end: endOfWeek(ref, { weekStartsOn: 0 }),
+    });
+    return days.map(day => {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      const dayEntries = entries.filter(e => e.date === dateStr && !e.noMalligeToday);
       return {
-        date,
+        date: dateStr,
         amount: dayEntries.reduce((s, e) => s + (e.totalAmount ?? 0), 0),
         quantity: dayEntries.reduce((s, e) => s + e.quantityAtte, 0),
       };
-    }),
-  [entries]);
+    });
+  }, [entries]);
 
   const getMonthlyStats = useCallback((yearMonth: string): MonthlyStats => {
-    const monthEntries = entries.filter(e => e.date.startsWith(yearMonth));
+    const monthEntries = entries.filter(e => e.date.startsWith(yearMonth) && !e.noMalligeToday);
     const confirmed = monthEntries.filter(e => e.rateStatus === 'confirmed');
     return {
       month: yearMonth,
       totalEarnings: confirmed.reduce((s, e) => s + (e.totalAmount ?? 0), 0),
       totalQuantity: monthEntries.reduce((s, e) => s + e.quantityAtte, 0),
       averageRate: confirmed.length > 0
-        ? confirmed.reduce((s, e) => s + (e.ratePerAtte ?? 0), 0) / confirmed.length
-        : 0,
+        ? confirmed.reduce((s, e) => s + (e.ratePerAtte ?? 0), 0) / confirmed.length : 0,
       entryCount: monthEntries.length,
     };
   }, [entries]);
 
   const getTodayEntries = useCallback(() =>
-    entries.filter(e => e.date === today),
-  [entries, today]);
+    entries.filter(e => e.date === today), [entries, today]);
 
   const getPendingEntriesCount = useCallback(() =>
-    entries.filter(e => e.rateStatus === 'pending').length,
-  [entries]);
+    entries.filter(e => e.rateStatus === 'pending').length, [entries]);
+
+  const getPendingEntriesCountForDate = useCallback((date: string) =>
+    entries.filter(e => e.date === date && e.rateStatus === 'pending').length, [entries]);
+
+  const getRateForDate = useCallback((date: string) =>
+    rates.find(r => r.date === date) ?? null, [rates]);
+
+  const hasEntryForDate = useCallback((date: string) =>
+    entries.some(e => e.date === date), [entries]);
+
+  const refresh = useCallback(() => loadData(), [loadData]);
 
   return (
     <MalligeDataContext.Provider value={{
-      entries, rates, loading, todayRate,
+      entries, rates, loading, syncing, todayRate,
       autoFetchStatus, lastAutoFetch,
-      addEntry, setRate, deleteEntry,
+      addEntry, addNoMalligeEntry, setRate, deleteEntry, updatePaymentStatus,
       getEntriesForMonth, getWeeklyEarnings, getMonthlyStats,
-      getTodayEntries, getPendingEntriesCount, fetchRateFromWebsite,
+      getTodayEntries, getPendingEntriesCount, getPendingEntriesCountForDate,
+      getRateForDate, hasEntryForDate, refresh, fetchRateFromWebsite,
     }}>
       {children}
     </MalligeDataContext.Provider>
