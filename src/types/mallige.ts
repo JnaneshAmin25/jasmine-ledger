@@ -26,6 +26,7 @@ export interface MarketRate {
   ratePerAtte: number;
   enteredBy: string;
   createdAt: string;
+  source?: 'auto' | 'manual';
 }
 
 export interface WeeklyEarning {

@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { MalligeDataProvider } from "@/context/MalligeDataContext";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Analytics from "./pages/Analytics";
@@ -16,12 +17,14 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <MalligeDataProvider>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </MalligeDataProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

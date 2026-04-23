@@ -13,7 +13,15 @@ import { Loader2 } from 'lucide-react';
 const Dashboard = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const navigate = useNavigate();
-  const { todayRate, getWeeklyEarnings, getPendingEntriesCount, loading: dataLoading } = useMalligeData();
+  const {
+    todayRate,
+    getWeeklyEarnings,
+    getPendingEntriesCount,
+    loading: dataLoading,
+    autoFetchStatus,
+    lastAutoFetch,
+    fetchRateFromWebsite,
+  } = useMalligeData();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -41,7 +49,13 @@ const Dashboard = () => {
       <main className="container py-6 space-y-6">
         {/* Rate Display Section */}
         <section className="animate-fade-in">
-          <RateDisplay rate={todayRate} pendingCount={pendingCount} />
+          <RateDisplay
+            rate={todayRate}
+            pendingCount={pendingCount}
+            autoFetchStatus={autoFetchStatus}
+            lastAutoFetch={lastAutoFetch}
+            onRefresh={fetchRateFromWebsite}
+          />
         </section>
 
         {/* Quick Actions */}
