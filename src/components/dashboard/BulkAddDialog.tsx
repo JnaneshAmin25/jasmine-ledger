@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { format, subDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -9,10 +10,21 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { CalendarPlus, Sparkles } from 'lucide-react';
 
 export const BulkAddDialog = () => {
   const [open, setOpen] = useState(false);
+  const [preset, setPreset] = useState<7 | 14 | 30>(7);
+
+  const dates = useMemo(() => {
+    const today = new Date();
+    const list: string[] = [];
+    for (let i = 1; i <= preset; i++) {
+      list.push(format(subDays(today, i), 'yyyy-MM-dd'));
+    }
+    return list;
+  }, [preset]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -38,8 +50,36 @@ export const BulkAddDialog = () => {
           </DialogHeader>
         </div>
 
-        <div className="p-6">
-          <p className="text-base text-muted-foreground">Coming together…</p>
+        <div className="p-6 space-y-4">
+          <ToggleGroup
+            type="single"
+            value={String(preset)}
+            onValueChange={(v) => {
+              if (v === '7' || v === '14' || v === '30') setPreset(Number(v) as 7 | 14 | 30);
+            }}
+            className="justify-start gap-2"
+          >
+            <ToggleGroupItem value="7" className="rounded-xl h-10 px-4 text-base">Last 7 days</ToggleGroupItem>
+            <ToggleGroupItem value="14" className="rounded-xl h-10 px-4 text-base">Last 14 days</ToggleGroupItem>
+            <ToggleGroupItem value="30" className="rounded-xl h-10 px-4 text-base">Last 30 days</ToggleGroupItem>
+          </ToggleGroup>
+
+          <div className="max-h-[60vh] overflow-y-auto rounded-xl border">
+            <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 sticky top-0 bg-muted/80 backdrop-blur px-4 py-2 text-sm font-medium text-muted-foreground border-b">
+              <div>Date</div>
+              <div>Chendu</div>
+              <div>Rate (₹/atte)</div>
+            </div>
+            <ul className="divide-y">
+              {dates.map((date) => (
+                <li key={date} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center px-4 py-3">
+                  <span className="text-base font-medium">{format(new Date(date), 'EEE, dd MMM')}</span>
+                  <span className="text-sm text-muted-foreground">—</span>
+                  <span className="text-sm text-muted-foreground">—</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <DialogFooter className="p-6 pt-0 gap-3">
