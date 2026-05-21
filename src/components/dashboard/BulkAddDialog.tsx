@@ -30,6 +30,7 @@ export const BulkAddDialog = () => {
   }, [preset]);
 
   const [rows, setRows] = useState<Record<string, { chendu: string; rate: string }>>({});
+  const [errors, setErrors] = useState<Record<string, 'rate-missing' | 'chendu-zero'>>({});
 
   const getRow = (date: string) => rows[date] ?? { chendu: '', rate: '' };
 
@@ -38,6 +39,12 @@ export const BulkAddDialog = () => {
       ...prev,
       [date]: { ...getRow(date), ...patch },
     }));
+    setErrors((prev) => {
+      if (!prev[date]) return prev;
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -53,6 +60,31 @@ export const BulkAddDialog = () => {
       return next;
     });
   }, [open, dates, getRateForDate]);
+
+  const validate = (): Record<string, 'rate-missing' | 'chendu-zero'> => {
+    const errs: Record<string, 'rate-missing' | 'chendu-zero'> = {};
+    for (const date of dates) {
+      if (hasEntryForDate(date)) continue;
+      const row = getRow(date);
+      if (!row.chendu.trim()) continue;
+      const chenduNum = parseFloat(row.chendu);
+      if (!Number.isFinite(chenduNum) || chenduNum <= 0) {
+        errs[date] = 'chendu-zero';
+        continue;
+      }
+      const rateNum = parseFloat(row.rate);
+      if (!row.rate.trim() || !Number.isFinite(rateNum) || rateNum <= 0) {
+        errs[date] = 'rate-missing';
+      }
+    }
+    return errs;
+  };
+
+  const filledCount = dates.filter((d) => {
+    if (hasEntryForDate(d)) return false;
+    const r = getRow(d);
+    return r.chendu.trim() !== '';
+  }).length;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -137,26 +169,36 @@ export const BulkAddDialog = () => {
                         </div>
                       )}
                     </div>
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.25"
-                      min="0"
-                      placeholder="—"
-                      value={row.chendu}
-                      onChange={(e) => setRow(date, { chendu: e.target.value })}
-                      className="h-11 rounded-lg text-base"
-                    />
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      step="1"
-                      min="0"
-                      placeholder="—"
-                      value={row.rate}
-                      onChange={(e) => setRow(date, { rate: e.target.value })}
-                      className="h-11 rounded-lg text-base"
-                    />
+                    <div>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.25"
+                        min="0"
+                        placeholder="—"
+                        value={row.chendu}
+                        onChange={(e) => setRow(date, { chendu: e.target.value })}
+                        className={`h-11 rounded-lg text-base ${errors[date] === 'chendu-zero' ? 'ring-2 ring-destructive' : ''}`}
+                      />
+                      {errors[date] === 'chendu-zero' && (
+                        <p className="text-xs text-destructive mt-1">Must be greater than 0</p>
+                      )}
+                    </div>
+                    <div>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        step="1"
+                        min="0"
+                        placeholder="—"
+                        value={row.rate}
+                        onChange={(e) => setRow(date, { rate: e.target.value })}
+                        className={`h-11 rounded-lg text-base ${errors[date] === 'rate-missing' ? 'ring-2 ring-destructive' : ''}`}
+                      />
+                      {errors[date] === 'rate-missing' && (
+                        <p className="text-xs text-destructive mt-1">Rate required</p>
+                      )}
+                    </div>
                   </li>
                 );
               })}
@@ -175,10 +217,17 @@ export const BulkAddDialog = () => {
           </Button>
           <Button
             type="button"
-            disabled
+            onClick={() => {
+              const errs = validate();
+              setErrors(errs);
+              if (Object.keys(errs).length > 0) return;
+              // TODO Task 6: perform the actual save here
+              console.log('validation passed, would save', rows);
+            }}
+            disabled={filledCount === 0}
             className="gradient-primary text-primary-foreground rounded-xl h-12 text-base flex-1 min-w-[140px]"
           >
-            Save All
+            Save All ({filledCount})
           </Button>
         </DialogFooter>
       </DialogContent>
