@@ -12,13 +12,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CalendarPlus, Check, Sparkles } from 'lucide-react';
+import { CalendarPlus, Check, Loader2, Sparkles } from 'lucide-react';
 import { useMalligeData } from '@/hooks/useMalligeData';
+import { useToast } from '@/hooks/use-toast';
 
 export const BulkAddDialog = () => {
-  const { entries, getRateForDate, hasEntryForDate } = useMalligeData();
+  const { entries, addEntry, setRate: setRateForDate, getRateForDate, hasEntryForDate } = useMalligeData();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState<7 | 14 | 30>(7);
+  const [saving, setSaving] = useState(false);
 
   const dates = useMemo(() => {
     const today = new Date();
@@ -85,6 +88,72 @@ export const BulkAddDialog = () => {
     const r = getRow(d);
     return r.chendu.trim() !== '';
   }).length;
+
+  const handleSave = async () => {
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    setSaving(true);
+
+    const toProcess = dates
+      .filter((d) => !hasEntryForDate(d))
+      .filter((d) => getRow(d).chendu.trim() !== '')
+      .slice()
+      .reverse();
+
+    const failed: string[] = [];
+    const succeeded: string[] = [];
+
+    for (const date of toProcess) {
+      const row = getRow(date);
+      const chenduNum = parseFloat(row.chendu);
+      const rateNum = parseFloat(row.rate);
+
+      try {
+        const existingRate = getRateForDate(date);
+        if (!existingRate || existingRate.ratePerAtte !== rateNum) {
+          const rateResult = await setRateForDate(date, rateNum);
+          if (!rateResult) throw new Error('setRate returned null');
+        }
+        const entry = await addEntry({ date, quantityChendu: chenduNum });
+        if (!entry) throw new Error('addEntry returned null');
+        succeeded.push(date);
+      } catch (err) {
+        console.error('Bulk add failed for', date, err);
+        failed.push(date);
+      }
+    }
+
+    setSaving(false);
+
+    setRows((prev) => {
+      const next = { ...prev };
+      for (const d of succeeded) delete next[d];
+      return next;
+    });
+
+    const skipped = dates.filter(
+      (d) => !hasEntryForDate(d) && getRow(d).chendu.trim() === '',
+    ).length;
+
+    if (failed.length === 0) {
+      toast({
+        title: 'Bulk Add Complete ✓',
+        description: `${succeeded.length} ${succeeded.length === 1 ? 'entry' : 'entries'} saved${skipped > 0 ? ` · ${skipped} day${skipped === 1 ? '' : 's'} skipped` : ''}.`,
+      });
+      setOpen(false);
+    } else {
+      const failedLabel = failed
+        .map((d) => format(new Date(d), 'dd MMM'))
+        .join(', ');
+      toast({
+        title: 'Some entries failed',
+        description: `${succeeded.length} saved · ${failed.length} failed: ${failedLabel}. Failed rows are still editable.`,
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -211,23 +280,22 @@ export const BulkAddDialog = () => {
             type="button"
             variant="outline"
             onClick={() => setOpen(false)}
+            disabled={saving}
             className="rounded-xl h-12 text-base flex-1"
           >
             Cancel
           </Button>
           <Button
             type="button"
-            onClick={() => {
-              const errs = validate();
-              setErrors(errs);
-              if (Object.keys(errs).length > 0) return;
-              // TODO Task 6: perform the actual save here
-              console.log('validation passed, would save', rows);
-            }}
-            disabled={filledCount === 0}
+            onClick={handleSave}
+            disabled={filledCount === 0 || saving}
             className="gradient-primary text-primary-foreground rounded-xl h-12 text-base flex-1 min-w-[140px]"
           >
-            Save All ({filledCount})
+            {saving ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <>Save All ({filledCount})</>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
