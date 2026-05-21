@@ -9,6 +9,7 @@ import { WeeklyChart } from '@/components/dashboard/WeeklyChart';
 import { JasmineNewsSlider } from '@/components/dashboard/JasmineNewsSlider';
 import { EntryList } from '@/components/dashboard/EntryList';
 import { AddEntryDialog } from '@/components/dashboard/AddEntryDialog';
+import { BulkAddDialog } from '@/components/dashboard/BulkAddDialog';
 import { SetRateDialog } from '@/components/dashboard/SetRateDialog';
 import { NoMalligeDialog } from '@/components/dashboard/NoMalligeDialog';
 import { RateCalculatorDialog } from '@/components/dashboard/RateCalculatorDialog';
@@ -82,6 +83,7 @@ const Dashboard = () => {
         <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <div className="flex flex-wrap gap-2">
             <AddEntryDialog />
+            <BulkAddDialog />
             <SetRateDialog />
             <NoMalligeDialog />
             <RateCalculatorDialog />
