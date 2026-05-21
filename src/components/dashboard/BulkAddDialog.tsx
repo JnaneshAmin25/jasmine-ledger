@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, subDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,9 +12,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CalendarPlus, Sparkles } from 'lucide-react';
+import { CalendarPlus, Check, Sparkles } from 'lucide-react';
+import { useMalligeData } from '@/hooks/useMalligeData';
 
 export const BulkAddDialog = () => {
+  const { entries, getRateForDate, hasEntryForDate } = useMalligeData();
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState<7 | 14 | 30>(7);
 
@@ -37,6 +39,20 @@ export const BulkAddDialog = () => {
       [date]: { ...getRow(date), ...patch },
     }));
   };
+
+  useEffect(() => {
+    if (!open) return;
+    setRows((prev) => {
+      const next = { ...prev };
+      for (const date of dates) {
+        const existingRate = getRateForDate(date);
+        if (existingRate && !next[date]?.rate) {
+          next[date] = { chendu: next[date]?.chendu ?? '', rate: String(existingRate.ratePerAtte) };
+        }
+      }
+      return next;
+    });
+  }, [open, dates, getRateForDate]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -84,6 +100,26 @@ export const BulkAddDialog = () => {
             </div>
             <ul className="divide-y">
               {dates.map((date) => {
+                const locked = hasEntryForDate(date);
+                const existingEntry = locked ? entries.find((e) => e.date === date) : null;
+
+                if (locked) {
+                  return (
+                    <li key={date} className="grid grid-cols-[1fr_2fr] gap-2 items-center px-4 py-3 bg-muted/40">
+                      <div className="text-base font-medium text-muted-foreground">
+                        {format(new Date(date), 'EEE, dd MMM')}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-success">
+                        <Check className="h-4 w-4" />
+                        <span className="font-medium">Already added</span>
+                        {existingEntry?.totalAmount != null && (
+                          <span className="text-muted-foreground">· ₹{existingEntry.totalAmount.toLocaleString()}</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                }
+
                 const row = getRow(date);
                 const chenduNum = row.chendu ? parseFloat(row.chendu) : 0;
                 const rateNum = row.rate ? parseFloat(row.rate) : 0;
