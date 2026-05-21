@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { CalendarPlus, Sparkles } from 'lucide-react';
 
@@ -25,6 +26,17 @@ export const BulkAddDialog = () => {
     }
     return list;
   }, [preset]);
+
+  const [rows, setRows] = useState<Record<string, { chendu: string; rate: string }>>({});
+
+  const getRow = (date: string) => rows[date] ?? { chendu: '', rate: '' };
+
+  const setRow = (date: string, patch: Partial<{ chendu: string; rate: string }>) => {
+    setRows((prev) => ({
+      ...prev,
+      [date]: { ...getRow(date), ...patch },
+    }));
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -71,13 +83,47 @@ export const BulkAddDialog = () => {
               <div>Rate (₹/atte)</div>
             </div>
             <ul className="divide-y">
-              {dates.map((date) => (
-                <li key={date} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center px-4 py-3">
-                  <span className="text-base font-medium">{format(new Date(date), 'EEE, dd MMM')}</span>
-                  <span className="text-sm text-muted-foreground">—</span>
-                  <span className="text-sm text-muted-foreground">—</span>
-                </li>
-              ))}
+              {dates.map((date) => {
+                const row = getRow(date);
+                const chenduNum = row.chendu ? parseFloat(row.chendu) : 0;
+                const rateNum = row.rate ? parseFloat(row.rate) : 0;
+                const atte = chenduNum / 4;
+                const earnings = atte * rateNum;
+                const showEstimate = chenduNum > 0 && rateNum > 0;
+
+                return (
+                  <li key={date} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center px-4 py-3">
+                    <div>
+                      <div className="text-base font-medium">{format(new Date(date), 'EEE, dd MMM')}</div>
+                      {showEstimate && (
+                        <div className="text-xs text-success mt-0.5">
+                          = {atte.toFixed(2)} atte → ₹{earnings.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.25"
+                      min="0"
+                      placeholder="—"
+                      value={row.chendu}
+                      onChange={(e) => setRow(date, { chendu: e.target.value })}
+                      className="h-11 rounded-lg text-base"
+                    />
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      step="1"
+                      min="0"
+                      placeholder="—"
+                      value={row.rate}
+                      onChange={(e) => setRow(date, { rate: e.target.value })}
+                      className="h-11 rounded-lg text-base"
+                    />
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
